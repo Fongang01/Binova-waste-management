@@ -1,0 +1,214 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =========================
+// ENUMS
+// =========================
+
+enum UserRole {
+  ADMIN
+  DRIVER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum TruckStatus {
+  AVAILABLE
+  IN_USE
+  MAINTENANCE
+  INACTIVE
+}
+
+enum BinStatus {
+  ACTIVE
+  INACTIVE
+  DAMAGED
+  REMOVED
+}
+
+enum CollectionTaskStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum CollectionPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum TaskSource {
+  MANUAL
+  AI_RECOMMENDATION
+}
+
+enum SensorType {
+  ULTRASONIC
+}
+
+enum SensorStatus {
+  ONLINE
+  OFFLINE
+  FAULTY
+}
+
+// =========================
+// USER
+// =========================
+
+model User {
+  id           Int        @id @default(autoincrement())
+  firstName    String
+  lastName     String
+  email        String     @unique
+  passwordHash String
+  phone        String?
+  role         UserRole   @default(DRIVER)
+  status       UserStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  truck   Truck?
+  tasks   CollectionTask[]    @relation("DriverTasks")
+  history CollectionHistory[] @relation("DriverHistory")
+}
+
+// =========================
+// TRUCK
+// =========================
+
+model Truck {
+  id                 Int         @id @default(autoincrement())
+  registrationNumber String      @unique
+  capacity           Float
+  status             TruckStatus @default(AVAILABLE)
+
+  driverId Int?  @unique
+  driver   User? @relation(fields: [driverId], references: [id])
+
+  tasks CollectionTask[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// =========================
+// BIN
+// =========================
+
+model Bin {
+  id      Int    @id @default(autoincrement())
+  binCode String @unique
+
+  latitude  Float
+  longitude Float
+  address   String?
+
+  capacity         Float
+  currentFillLevel Float @default(0)
+
+  status BinStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks             CollectionTask[]
+  sensorReadings    SensorReading[]
+  collectionHistory CollectionHistory[]
+}
+
+// =========================
+// COLLECTION TASK
+// =========================
+
+model CollectionTask {
+  id Int @id @default(autoincrement())
+
+  binId    Int
+  driverId Int?
+  truckId  Int?
+
+  status   CollectionTaskStatus @default(PENDING)
+  priority CollectionPriority   @default(NORMAL)
+  source   TaskSource           @default(MANUAL)
+
+  recommendedRoute  String?
+  distanceKm        Float?
+  estimatedDuration Int?
+
+  assignedAt  DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bin    Bin    @relation(fields: [binId], references: [id])
+  driver User?  @relation("DriverTasks", fields: [driverId], references: [id])
+  truck  Truck? @relation(fields: [truckId], references: [id])
+
+  history CollectionHistory[]
+}
+
+// =========================
+// COLLECTION HISTORY
+// =========================
+
+model CollectionHistory {
+  id Int @id @default(autoincrement())
+
+  taskId   Int
+  binId    Int
+  driverId Int?
+
+  collectedAt     DateTime @default(now())
+  fillLevelBefore Float?
+  fillLevelAfter  Float?
+
+  notes String?
+
+  task   CollectionTask @relation(fields: [taskId], references: [id])
+  bin    Bin            @relation(fields: [binId], references: [id])
+  driver User?          @relation("DriverHistory", fields: [driverId], references: [id])
+}
+
+// =========================
+// SENSOR READING
+// =========================
+
+model SensorReading {
+  id Int @id @default(autoincrement())
+
+  binId Int
+
+  sensorType SensorType   @default(ULTRASONIC)
+  status     SensorStatus @default(ONLINE)
+
+  fillLevel  Float?
+  distanceCm Float?
+
+  recordedAt DateTime @default(now())
+
+  bin Bin @relation(fields: [binId], references: [id])
+}
