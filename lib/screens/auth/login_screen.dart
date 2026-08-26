@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../core/config/api_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/constants/app_assets.dart';
 import '../../core/routes/app_routes.dart';
@@ -39,11 +40,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (authNotifier.status == AuthStatus.error) {
         if (mounted) {
+          final isConnErr = authNotifier.errorMessage?.toLowerCase().contains('server') == true ||
+              authNotifier.errorMessage?.toLowerCase().contains('reach') == true;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(authNotifier.errorMessage ?? 'Login failed'),
               backgroundColor: Colors.redAccent,
               behavior: SnackBarBehavior.floating,
+              action: isConnErr
+                  ? SnackBarAction(
+                      label: 'Server IP',
+                      textColor: Colors.white,
+                      onPressed: _showServerConfigDialog,
+                    )
+                  : null,
             ),
           );
         }
@@ -208,6 +218,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 32),
                   _buildSafetyBanner(),
+                  const SizedBox(height: 20),
+                  _buildServerStatusChip(),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -218,11 +230,248 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Widget _buildServerStatusChip() {
+    return Center(
+      child: InkWell(
+        onTap: _showServerConfigDialog,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.wifi_tethering, size: 14, color: AppTheme.primaryEmerald),
+              const SizedBox(width: 6),
+              Text(
+                'Server: ${ApiConfig.baseUrl}',
+                style: const TextStyle(fontSize: 11, color: AppTheme.darkText, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.settings_outlined, size: 12, color: AppTheme.greyText),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showServerConfigDialog() {
+    final controller = TextEditingController(text: ApiConfig.baseUrl);
+    bool testing = false;
+    String? testResult;
+    bool? testSuccess;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Backend Server Configuration',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Select or enter the URL where the BINOVA Node.js backend is running.',
+                    style: TextStyle(color: AppTheme.greyText, fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    decoration: InputDecoration(
+                      labelText: 'Server Base URL',
+                      hintText: 'http://192.168.4.77:3000',
+                      prefixIcon: const Icon(Icons.dns_outlined),
+                      suffixIcon: IconButton(
+                        icon: testing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.refresh),
+                        onPressed: () async {
+                          setModalState(() {
+                            testing = true;
+                            testResult = null;
+                            testSuccess = null;
+                          });
+                          final working = await ApiConfig.probeBestUrl();
+                          if (working != null) {
+                            controller.text = working;
+                            testResult = 'Auto-detected active server: $working';
+                            testSuccess = true;
+                          } else {
+                            testResult = 'Auto-detect failed. Enter IP manually.';
+                            testSuccess = false;
+                          }
+                          setModalState(() {
+                            testing = false;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      ActionChip(
+                        label: const Text('Wi-Fi LAN (192.168.4.77)'),
+                        onPressed: () {
+                          controller.text = ApiConfig.lanWifiUrl;
+                          setModalState(() {
+                            testResult = null;
+                          });
+                        },
+                      ),
+                      ActionChip(
+                        label: const Text('USB ADB (127.0.0.1)'),
+                        onPressed: () {
+                          controller.text = ApiConfig.localhostUrl;
+                          setModalState(() {
+                            testResult = null;
+                          });
+                        },
+                      ),
+                      ActionChip(
+                        label: const Text('Emulator (10.0.2.2)'),
+                        onPressed: () {
+                          controller.text = ApiConfig.emulatorDefaultUrl;
+                          setModalState(() {
+                            testResult = null;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  if (testResult != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: testSuccess == true ? Colors.green.shade50 : Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: testSuccess == true ? Colors.green.shade300 : Colors.red.shade300,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            testSuccess == true ? Icons.check_circle : Icons.error_outline,
+                            color: testSuccess == true ? Colors.green : Colors.red,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              testResult!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: testSuccess == true ? Colors.green.shade900 : Colors.red.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: testing
+                              ? null
+                              : () async {
+                                  setModalState(() {
+                                    testing = true;
+                                    testResult = null;
+                                  });
+                                  final ok = await ApiConfig.testUrl(controller.text);
+                                  setModalState(() {
+                                    testing = false;
+                                    testSuccess = ok;
+                                    testResult = ok
+                                        ? 'Connection successful! (HTTP 200 OK)'
+                                        : 'Could not connect to ${controller.text}';
+                                  });
+                                },
+                          child: const Text('Test Connection'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryEmerald,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () async {
+                            final target = controller.text.trim();
+                            if (target.isNotEmpty) {
+                              await ApiConfig.setBaseUrl(target);
+                              if (mounted) setState(() {});
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Server set to: $target'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
+                          child: const Text('Save'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildSafetyBanner() {
     return BinovaCard(
       padding: const EdgeInsets.all(16),
-      color: AppTheme.softMint.withOpacity(0.5),
-      border: Border.all(color: AppTheme.primaryEmerald.withOpacity(0.1)),
+      color: AppTheme.softMint.withValues(alpha: 0.5),
+      border: Border.all(color: AppTheme.primaryEmerald.withValues(alpha: 0.1)),
       child: Row(
         children: [
           Container(

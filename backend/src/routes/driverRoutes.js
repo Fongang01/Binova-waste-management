@@ -11,5 +11,6 @@ router.get("/", driverController.listDrivers);
 router.get("/:id", driverController.getDriver);
 router.put("/:id", driverController.updateDriver);
 router.patch("/:id/status", driverController.setDriverStatus);
+router.delete("/:id", driverController.deleteDriver);
 
 export default router;

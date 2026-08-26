@@ -20,6 +20,23 @@ export async function getMyTask(req, res, next) {
   }
 }
 
+export async function getMyTruck(req, res, next) {
+  try {
+    let truck = await prisma.truck.findFirst({ where: { driverId: req.user.id } });
+    if (!truck) {
+      const activeTask = await prisma.collectionTask.findFirst({
+        where: { driverId: req.user.id, truckId: { not: null } },
+        include: { truck: true },
+        orderBy: { createdAt: "desc" },
+      });
+      if (activeTask) truck = activeTask.truck;
+    }
+    res.json({ success: true, data: truck || null });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function patchMyTaskStatus(req, res, next) {
   try {
     const { status } = req.body;
@@ -29,20 +46,46 @@ export async function patchMyTaskStatus(req, res, next) {
     if (task.driverId !== req.user.id) return res.status(403).json({ success: false, message: "Not authorized" });
 
     const valid = {
-      ASSIGNED: ["IN_PROGRESS"],
-      IN_PROGRESS: ["COMPLETED"],
+      ASSIGNED: ["IN_PROGRESS", "ASSIGNED"],
+      PENDING: ["IN_PROGRESS", "ASSIGNED"],
+      IN_PROGRESS: ["COMPLETED", "IN_PROGRESS"],
       COMPLETED: [],
     };
-    if (!valid[task.status] || !valid[task.status].includes(status)) return res.status(400).json({ success: false, message: "Invalid status transition" });
+    if (task.status === status) {
+      return res.json({ success: true, data: task });
+    }
+    if (!valid[task.status] || !valid[task.status].includes(status)) {
+      return res.status(400).json({ success: false, message: "Invalid status transition" });
+    }
 
-    const updated = await prisma.collectionTask.update({ where: { id: Number(req.params.id) }, data: { status } });
+    const updated = await prisma.collectionTask.update({
+      where: { id: Number(req.params.id) },
+      data: {
+        status,
+        startedAt: status === "IN_PROGRESS" ? new Date() : undefined,
+        completedAt: status === "COMPLETED" ? new Date() : undefined,
+      },
+    });
+
     if (status === "COMPLETED") {
       // create history if not exists
       const exists = await prisma.collectionHistory.findFirst({ where: { taskId: updated.id } });
       if (!exists) {
         const bin = await prisma.bin.findUnique({ where: { id: updated.binId } });
-        await prisma.collectionHistory.create({ data: { taskId: updated.id, binId: updated.binId, driverId: updated.driverId, collectionDate: new Date(), fillLevelBefore: bin.currentFillLevel, fillLevelAfter: 0, notes: updated.notes } });
-        await prisma.bin.update({ where: { id: bin.id }, data: { currentFillLevel: 0 } });
+        await prisma.collectionHistory.create({
+          data: {
+            taskId: updated.id,
+            binId: updated.binId,
+            driverId: updated.driverId,
+            collectedAt: new Date(),
+            fillLevelBefore: bin ? bin.currentFillLevel : 0,
+            fillLevelAfter: 0,
+            notes: updated.notes,
+          },
+        });
+        if (bin) {
+          await prisma.bin.update({ where: { id: bin.id }, data: { currentFillLevel: 0 } });
+        }
       }
     }
 

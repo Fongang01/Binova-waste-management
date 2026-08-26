@@ -47,3 +47,12 @@ export async function setDriverStatus(req, res, next) {
     next(err);
   }
 }
+
+export async function deleteDriver(req, res, next) {
+  try {
+    await driverService.deleteDriver(req.params.id);
+    res.json({ success: true, message: "Driver deleted" });
+  } catch (err) {
+    next(err);
+  }
+}

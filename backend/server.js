@@ -56,6 +56,8 @@ if (app._router && app._router.stack) {
   console.log('Registered routes:', routes.map(r => r.path).join(', '));
 }
 
-app.listen(PORT, () => {
-  console.log(`BINOVA backend running on http://localhost:${PORT}`);
+const HOST = process.env.HOST || '0.0.0.0';
+
+app.listen(PORT, HOST, () => {
+  console.log(`BINOVA backend running on http://${HOST}:${PORT}`);
 });

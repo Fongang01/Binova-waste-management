@@ -116,7 +116,7 @@ class _TasksList extends StatelessWidget {
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: Divider(height: 1, color: Color(0xFFF0F0F0)),
               ),
-              Row(
+               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                    Column(
@@ -130,24 +130,62 @@ class _TasksList extends StatelessWidget {
                        )),
                      ],
                    ),
-                   ElevatedButton(
-                     onPressed: () {},
-                     style: ElevatedButton.styleFrom(
-                       backgroundColor: AppTheme.primaryEmerald,
-                       foregroundColor: Colors.white,
-                       elevation: 0,
-                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
-                       minimumSize: const Size(0, 44),
-                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                     ),
-                     child: const Text('Update Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                   ),
+                   _buildActionButton(context, task),
                 ],
               ),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildActionButton(BuildContext context, TaskEntity task) {
+    if (task.status == TaskStatus.completed) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.green.withAlpha(25),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.green.withAlpha(50)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle_rounded, color: Colors.green, size: 16),
+            SizedBox(width: 6),
+            Text('Completed', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
+          ],
+        ),
+      );
+    }
+
+    final isAssigned = task.status == TaskStatus.assigned || task.status == TaskStatus.accepted;
+    final buttonLabel = isAssigned ? 'Start Task' : 'Complete';
+    final targetStatus = isAssigned ? TaskStatus.inProgress : TaskStatus.completed;
+    final buttonColor = isAssigned ? AppTheme.primaryEmerald : const Color(0xFF2563EB);
+
+    return ElevatedButton(
+      onPressed: () async {
+        final driverNotifier = context.read<DriverNotifier>();
+        await driverNotifier.updateStatus(task.id, targetStatus);
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: buttonColor,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+        minimumSize: const Size(0, 42),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(isAssigned ? Icons.play_arrow_rounded : Icons.check_circle_outline_rounded, size: 18),
+          const SizedBox(width: 6),
+          Text(buttonLabel, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        ],
+      ),
     );
   }
 
@@ -159,7 +197,7 @@ class _TasksList extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withAlpha(25),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(

@@ -132,14 +132,14 @@ class AppTheme {
         backgroundColor: Colors.white,
         elevation: 0,
         indicatorColor: primaryEmerald.withOpacity(0.1),
-        labelTextStyle: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return GoogleFonts.poppins(color: primaryEmerald, fontSize: 12, fontWeight: FontWeight.bold);
           }
           return GoogleFonts.poppins(color: greyText, fontSize: 12);
         }),
-        iconTheme: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return const IconThemeData(color: primaryEmerald, size: 26);
           }
           return const IconThemeData(color: greyText, size: 24);

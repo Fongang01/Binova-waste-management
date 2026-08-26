@@ -32,3 +32,8 @@ admin-dashboard/.vite/
 # OS
 .DS_Store
 Thumbs.db
+
+# Backups
+admin-dashboard_backup/
+*.backup
+admin-dashboard/src/login-styles.txt

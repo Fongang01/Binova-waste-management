@@ -145,7 +145,6 @@ class DriverHomeScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
                       if (driverNotifier.tasks.isEmpty)
                         _buildEmptyState(
                           'No collection tasks assigned yet',
@@ -153,7 +152,54 @@ class DriverHomeScreen extends StatelessWidget {
                           Icons.delete_outline_rounded,
                         )
                       else
-                        const SizedBox(),
+                        Column(
+                          children: driverNotifier.tasks
+                              .take(3)
+                              .map((task) => BinovaCard(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    padding: const EdgeInsets.all(16),
+                                    onTap: () => driverNotifier.setTabIndex(1),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.softMint,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: const Icon(Icons.delete_sweep_rounded,
+                                              color: AppTheme.primaryEmerald, size: 22),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text('Bin ${task.binId}',
+                                                  style: const TextStyle(
+                                                      fontWeight: FontWeight.bold, fontSize: 14)),
+                                              const SizedBox(height: 2),
+                                              Text(task.location,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                      color: AppTheme.greyText, fontSize: 12)),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text('${task.fillLevel}%',
+                                            style: TextStyle(
+                                                color: task.fillLevel > 80
+                                                    ? Colors.red
+                                                    : AppTheme.primaryEmerald,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15)),
+                                      ],
+                                    ),
+                                  ))
+                              .toList(),
+                        ),
 
                       const SizedBox(height: 32),
                       Text(

@@ -27,9 +27,20 @@ export default function Login(){
       saveSession(data.token, data.user)
       nav('/dashboard')
     }catch(err){
-      if (err.response) setError(err.response.data.message || 'Login failed')
-      else setError('Network error')
-    }finally{setLoading(false)}
+      if (err.response?.data?.message) {
+        setError(err.response.data.message)
+      } else if (err.response?.data?.error) {
+        setError(err.response.data.error)
+      } else if (typeof err.response?.data === 'string' && err.response.data.length < 200) {
+        setError(err.response.data)
+      } else if (err.message) {
+        setError(err.message)
+      } else {
+        setError('Login failed. Please try again.')
+      }
+    }finally{
+      setLoading(false)
+    }
   }
 
   return (
@@ -51,9 +62,39 @@ export default function Login(){
           </div>
         </div>
 
-        <div className="hero-orbit orbit-one" />
-        <div className="hero-orbit orbit-two" />
-        <div className="hero-orbit orbit-three" />
+        {/* Animated ambient hero background with floating orbs and rings */}
+        <div className="hero-animation-container" aria-hidden="true">
+          <div className="hero-gradient-overlay" />
+          
+          {/* Large soft translucent orbs */}
+          <div className="hero-orb orb-large-1" />
+          <div className="hero-orb orb-large-2" />
+          <div className="hero-orb orb-large-3" />
+
+          {/* Medium floating orbs */}
+          <div className="hero-orb orb-medium-1" />
+          <div className="hero-orb orb-medium-2" />
+          <div className="hero-orb orb-medium-3" />
+
+          {/* Small accent orbs */}
+          <div className="hero-orb orb-small-1" />
+          <div className="hero-orb orb-small-2" />
+          <div className="hero-orb orb-small-3" />
+
+          {/* Thin geometric circular orbit rings */}
+          <div className="hero-orbit orbit-one" />
+          <div className="hero-orbit orbit-two" />
+          <div className="hero-orbit orbit-three" />
+          <div className="hero-orbit orbit-four" />
+
+          {/* Subtle floating smart-city telemetry particles */}
+          <div className="hero-particle particle-1" />
+          <div className="hero-particle particle-2" />
+          <div className="hero-particle particle-3" />
+          <div className="hero-particle particle-4" />
+          <div className="hero-particle particle-5" />
+          <div className="hero-particle particle-6" />
+        </div>
       </div>
 
       <div className="login-panel">
@@ -67,7 +108,7 @@ export default function Login(){
           <form className="login-form" onSubmit={handleSubmit}>
             <div className="field-group">
               <label htmlFor="email">Email</label>
-              <input id="email" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@binova.com" required />
+              <input id="email" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@binova.cm" required />
             </div>
 
             <div className="field-group">

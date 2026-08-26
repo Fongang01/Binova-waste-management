@@ -5,6 +5,7 @@ import '../../domain/usecases/logout_usecase.dart';
 import '../../domain/usecases/reset_password_usecase.dart';
 import '../../domain/usecases/get_current_user_usecase.dart';
 import '../../../../core/usecases/usecase.dart';
+import '../../../../core/config/api_config.dart';
 
 enum AuthStatus { initial, loading, authenticated, unauthenticated, error }
 
@@ -36,7 +37,8 @@ class AuthNotifier extends ChangeNotifier {
     notifyListeners();
     try {
       _user = await getCurrentUserUseCase(NoParams());
-      _status = _user != null ? AuthStatus.authenticated : AuthStatus.unauthenticated;
+      _status =
+          _user != null ? AuthStatus.authenticated : AuthStatus.unauthenticated;
     } catch (e) {
       _status = AuthStatus.unauthenticated;
     }
@@ -47,9 +49,13 @@ class AuthNotifier extends ChangeNotifier {
     _status = AuthStatus.loading;
     notifyListeners();
     try {
-      final userEntity = await loginUseCase(LoginParams(email: email, password: password));
-      if (userEntity.role != 'driver') {
-        throw Exception('This application is restricted to authorized waste collection agents.');
+      final userEntity = await loginUseCase(
+        LoginParams(email: email, password: password),
+      );
+      if (userEntity.role.toLowerCase() != 'driver') {
+        throw Exception(
+          'This application is restricted to authorized waste collection agents.',
+        );
       }
       _user = userEntity;
       _status = AuthStatus.authenticated;
@@ -79,13 +85,18 @@ class AuthNotifier extends ChangeNotifier {
   }
 
   String _handleError(dynamic e) {
-    final message = e.toString();
-    if (message.contains('user-not-found')) return 'No user found with this email.';
-    if (message.contains('wrong-password')) return 'Incorrect password.';
-    if (message.contains('email-already-in-use')) return 'This email is already registered.';
-    if (message.contains('invalid-email')) return 'Invalid email address.';
-    if (message.contains('weak-password')) return 'Password is too weak.';
-    if (message.contains('network-request-failed')) return 'Network error. Please check your connection.';
+    final raw = e.toString().replaceFirst('Exception: ', '').trim();
+    final lower = raw.toLowerCase();
+    if (lower.contains('connection refused') ||
+        lower.contains('connection timeout') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('socketexception') ||
+        lower.contains('network error') ||
+        lower.contains('no route to host') ||
+        lower.contains('cannot reach server')) {
+      return 'Cannot reach server at ${ApiConfig.baseUrl}. Ensure phone and PC are on the same Wi-Fi network or connected via USB.';
+    }
+    if (raw.isNotEmpty) return raw;
     return 'Authentication failed. Please try again.';
   }
 }

@@ -1,6 +1,4 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/splash_screen.dart';
@@ -46,7 +44,7 @@ class AppRoutes {
 
         if (status == AuthStatus.authenticated) {
           if (onAuthScreen) {
-            final role = authNotifier.user?.role;
+            final role = authNotifier.user?.role.toLowerCase();
             if (role == 'driver') return driverDashboard;
             return welcome; 
           }

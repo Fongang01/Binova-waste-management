@@ -1,31 +1,91 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Layout/Sidebar'
 import Topbar from '../components/Layout/Topbar'
 import { getSummary } from '../api/dashboardApi'
-import { Activity, AlertTriangle, Truck, Users, Trash2, CheckCircle2 } from 'lucide-react'
+import {
+  Activity,
+  AlertTriangle,
+  Truck,
+  Users,
+  Trash2,
+  CheckCircle2,
+  ArrowUpRight,
+  Sparkles,
+  Clock
+} from 'lucide-react'
 
-function StatCard({title, value, icon: Icon, tone = 'default'}){
+function StatCard({ title, value, icon: Icon, tone = 'default', onClick, subtitle = 'Click to view records' }){
   return (
-    <div className={`stat-card stat-${tone}`}>
-      <div className="stat-icon-wrap">
-        <Icon size={18} />
+    <div
+      className={`stat-card stat-${tone} interactive-card`}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
+      title={`View ${title}`}
+    >
+      <div className="stat-card-header">
+        <div className="stat-icon-wrap">
+          <Icon size={18} />
+        </div>
+        <div className="stat-arrow-hint">
+          <ArrowUpRight size={15} />
+        </div>
       </div>
       <div className="stat-title">{title}</div>
       <div className="stat-value">{value ?? '—'}</div>
-      <div className="stat-meta">Live system data</div>
+      <div className="stat-meta">{subtitle}</div>
     </div>
   )
 }
 
+const getSummaryValue = (summary, ...keys) => {
+  for (const key of keys) {
+    if (summary && summary[key] !== undefined && summary[key] !== null) return summary[key]
+  }
+  return 0
+}
+
 export default function Dashboard(){
+  const nav = useNavigate()
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  useEffect(()=>{
+  const user = JSON.parse(sessionStorage.getItem('binova_user') || 'null')
+  const adminName = user?.firstName || 'Administrator'
+
+  const load = () => {
     setLoading(true)
-    getSummary().then(r=>{ setSummary(r.data); setError(null) }).catch(e=>{ setError('Unable to load summary') }).finally(()=>setLoading(false))
+    getSummary()
+      .then((response) => {
+        const payload = response?.data?.data ?? response?.data ?? {}
+        setSummary(payload)
+        setError(null)
+      })
+      .catch(() => {
+        setError('Unable to load dashboard summary data. Please verify backend connection.')
+      })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    load()
+    const handleRefresh = () => load()
+    window.addEventListener('binova:refresh-summary', handleRefresh)
+    return () => window.removeEventListener('binova:refresh-summary', handleRefresh)
   }, [])
+
+  const totalDrivers = getSummaryValue(summary, 'totalDrivers')
+  const activeDrivers = getSummaryValue(summary, 'activeDrivers')
+  const totalTrucks = getSummaryValue(summary, 'totalTrucks')
+  const availableTrucks = getSummaryValue(summary, 'availableTrucks')
+  const totalBins = getSummaryValue(summary, 'totalBins')
+  const criticalBins = getSummaryValue(summary, 'criticalBins')
+  const pendingCollections = getSummaryValue(summary, 'pendingTasks', 'pendingCollections')
+  const inProgressCollections = getSummaryValue(summary, 'inProgressTasks', 'inProgressCollections')
+  const completedCollections = getSummaryValue(summary, 'completedTasks', 'completedCollections')
 
   return (
     <div className="app-shell">
@@ -35,26 +95,99 @@ export default function Dashboard(){
         <div className="content">
           <section className="welcome-card">
             <div>
-              <p className="eyebrow">Good afternoon, Administrator</p>
-              <h2>Here&apos;s what&apos;s happening with BINOVA today.</h2>
+              <p className="eyebrow">Municipal Operations Center</p>
+              <h2>Welcome back, {adminName}</h2>
+              <p className="welcome-subtext">Real-time overview of waste collection fleet, bins, and field operations.</p>
             </div>
             <div className="welcome-metric">
-              <span className="metric-label">Network health</span>
-              <strong>94.2%</strong>
+              <span className="metric-label">Network Status</span>
+              <strong className="status-live-tag"><span className="live-pulsing-dot" /> Live</strong>
             </div>
           </section>
 
-          {loading && <div className="page-empty"><div className="skeleton" /><div className="skeleton short" /></div>}
+          {loading && (
+            <div className="page-empty">
+              <div className="skeleton" />
+              <div className="skeleton short" />
+            </div>
+          )}
+
           {error && <div className="error-box">{error}</div>}
+
           {summary && (
             <div className="stats-grid">
-              <StatCard title="Total Bins" value={summary.totalBins} icon={Trash2} tone="primary" />
-              <StatCard title="Critical Bins" value={summary.criticalBins} icon={AlertTriangle} tone="warning" />
-              <StatCard title="Active Drivers" value={summary.activeDrivers} icon={Users} tone="info" />
-              <StatCard title="Available Trucks" value={summary.availableTrucks} icon={Truck} tone="success" />
-              <StatCard title="Pending Collections" value={summary.pendingCollections} icon={Activity} tone="neutral" />
-              <StatCard title="In Progress" value={summary.inProgressCollections} icon={Activity} tone="neutral" />
-              <StatCard title="Completed" value={summary.completedCollections} icon={CheckCircle2} tone="success" />
+              <StatCard
+                title="Total Drivers"
+                value={totalDrivers}
+                icon={Users}
+                tone="primary"
+                onClick={() => nav('/drivers')}
+                subtitle="Manage registered drivers →"
+              />
+              <StatCard
+                title="Active Drivers"
+                value={activeDrivers}
+                icon={Users}
+                tone="info"
+                onClick={() => nav('/drivers?status=ACTIVE')}
+                subtitle="Filter active drivers →"
+              />
+              <StatCard
+                title="Total Trucks"
+                value={totalTrucks}
+                icon={Truck}
+                tone="success"
+                onClick={() => nav('/trucks')}
+                subtitle="View vehicle fleet →"
+              />
+              <StatCard
+                title="Available Trucks"
+                value={availableTrucks}
+                icon={Truck}
+                tone="success"
+                onClick={() => nav('/trucks?status=AVAILABLE')}
+                subtitle="Filter available trucks →"
+              />
+              <StatCard
+                title="Total Bins"
+                value={totalBins}
+                icon={Trash2}
+                tone="primary"
+                onClick={() => nav('/bins')}
+                subtitle="View all waste bins →"
+              />
+              <StatCard
+                title="Critical Bins"
+                value={criticalBins}
+                icon={AlertTriangle}
+                tone="warning"
+                onClick={() => nav('/bins?filter=critical')}
+                subtitle="View bins ≥ 80% full →"
+              />
+              <StatCard
+                title="Pending Collections"
+                value={pendingCollections}
+                icon={Clock}
+                tone="neutral"
+                onClick={() => nav('/collections?status=ASSIGNED')}
+                subtitle="View assigned tasks →"
+              />
+              <StatCard
+                title="In Progress"
+                value={inProgressCollections}
+                icon={Activity}
+                tone="neutral"
+                onClick={() => nav('/collections?status=IN_PROGRESS')}
+                subtitle="Track active routes →"
+              />
+              <StatCard
+                title="Completed"
+                value={completedCollections}
+                icon={CheckCircle2}
+                tone="success"
+                onClick={() => nav('/collections?status=COMPLETED')}
+                subtitle="View completed tasks →"
+              />
             </div>
           )}
         </div>
@@ -62,3 +195,4 @@ export default function Dashboard(){
     </div>
   )
 }
+

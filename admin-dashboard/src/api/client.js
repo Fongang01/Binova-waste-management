@@ -1,9 +1,10 @@
 import axios from 'axios'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+const rawBase = (import.meta.env.VITE_API_URL || 'http://localhost:3000').trim().replace(/\/+$/, '')
+const baseURL = rawBase.endsWith('/api') ? rawBase : `${rawBase}/api`
 
 const client = axios.create({
-  baseURL: `${API_BASE}/api`,
+  baseURL,
   headers: { 'Content-Type': 'application/json' }
 })
 
@@ -16,10 +17,13 @@ client.interceptors.request.use(config => {
 client.interceptors.response.use(
   r => r,
   err => {
-    if (err.response && err.response.status === 401) {
+    const isLoginRequest = err.config?.url?.includes('/auth/login')
+    if (err.response && err.response.status === 401 && !isLoginRequest) {
       sessionStorage.removeItem('binova_token')
       sessionStorage.removeItem('binova_user')
-      window.location.href = '/login'
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(err)
   }

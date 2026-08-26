@@ -3,12 +3,24 @@ import prisma from "../config/prisma.js";
 const VALID_SOURCES = ["MANUAL", "AI_RECOMMENDATION"];
 
 export async function createTask(data) {
-  const { binId, driverId, truckId, source } = data;
+  const { binId, driverId, truckId, source, status, priority, distanceKm, distance, estimatedDuration, recommendedRoute, notes } = data;
   if (!binId) throw { status: 400, message: "binId is required" };
   if (source && !VALID_SOURCES.includes(source)) throw { status: 400, message: "Invalid source" };
 
-  // Only ADMIN controller will call this; service trusts caller
-  return prisma.collectionTask.create({ data: { binId: Number(binId), driverId: driverId ? Number(driverId) : null, truckId: truckId ? Number(truckId) : null, status: data.status || "ASSIGNED", priority: data.priority || "NORMAL", source: source || "MANUAL", recommendedRoute: data.recommendedRoute || null, distance: data.distance ? Number(data.distance) : null, estimatedDuration: data.estimatedDuration || null, notes: data.notes || null } });
+  return prisma.collectionTask.create({
+    data: {
+      binId: Number(binId),
+      driverId: driverId ? Number(driverId) : null,
+      truckId: truckId ? Number(truckId) : null,
+      status: status || "ASSIGNED",
+      priority: priority || "NORMAL",
+      source: source || "MANUAL",
+      recommendedRoute: recommendedRoute || null,
+      distanceKm: distanceKm !== undefined && distanceKm !== null ? Number(distanceKm) : (distance !== undefined && distance !== null ? Number(distance) : null),
+      estimatedDuration: estimatedDuration ? Number(estimatedDuration) : null,
+      notes: notes || null,
+    },
+  });
 }
 
 export async function listTasks(filter) {
@@ -53,11 +65,20 @@ async function createHistoryFromTask(task) {
   const bin = await prisma.bin.findUnique({ where: { id: task.binId } });
   if (!bin) return;
 
-  // avoid duplicate history: check by taskId
   const exists = await prisma.collectionHistory.findFirst({ where: { taskId: task.id } });
   if (exists) return;
 
-  await prisma.collectionHistory.create({ data: { taskId: task.id, binId: task.binId, driverId: task.driverId, collectionDate: new Date(), fillLevelBefore: bin.currentFillLevel, fillLevelAfter: 0, notes: task.notes } });
-  // Reset bin fill level after collection (assumption)
+  await prisma.collectionHistory.create({
+    data: {
+      taskId: task.id,
+      binId: task.binId,
+      driverId: task.driverId,
+      collectedAt: new Date(),
+      fillLevelBefore: bin.currentFillLevel,
+      fillLevelAfter: 0,
+      notes: task.notes,
+    },
+  });
+
   await prisma.bin.update({ where: { id: bin.id }, data: { currentFillLevel: 0 } });
 }

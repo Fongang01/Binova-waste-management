@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/constants/app_strings.dart';
 import '../../core/constants/app_assets.dart';
 import '../../core/routes/app_routes.dart';
 import '../../core/theme/app_theme.dart';

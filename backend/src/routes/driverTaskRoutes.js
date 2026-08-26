@@ -7,6 +7,7 @@ const router = express.Router();
 router.use(authenticate, requireRole("DRIVER"));
 
 router.get("/", driverTasks.listMyTasks);
+router.get("/truck", driverTasks.getMyTruck);
 router.get("/:id", driverTasks.getMyTask);
 router.patch("/:id/status", driverTasks.patchMyTaskStatus);
 

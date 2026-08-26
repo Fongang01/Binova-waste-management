@@ -1,5 +1,5 @@
-import React from 'react'
-import { NavLink } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Trash2,
@@ -9,8 +9,8 @@ import {
   Map,
   Settings,
   LogOut,
-  ShieldCheck
 } from 'lucide-react'
+import { clearSession } from '../../utils/auth'
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -22,6 +22,28 @@ const navItems = [
 ]
 
 export default function Sidebar(){
+  const nav = useNavigate()
+  const [user, setUser] = useState(() => JSON.parse(sessionStorage.getItem('binova_user') || 'null'))
+  const [customAvatar, setCustomAvatar] = useState(() => localStorage.getItem('binova_custom_avatar') || null)
+
+  const syncUser = () => {
+    setUser(JSON.parse(sessionStorage.getItem('binova_user') || 'null'))
+    setCustomAvatar(localStorage.getItem('binova_custom_avatar') || null)
+  }
+
+  useEffect(() => {
+    window.addEventListener('binova:user-updated', syncUser)
+    return () => window.removeEventListener('binova:user-updated', syncUser)
+  }, [])
+
+  const logout = () => {
+    clearSession()
+    nav('/login')
+  }
+
+  const displayName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim() || 'Administrator'
+  const initials = displayName.split(' ').filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase() || 'AD'
+
   return (
     <aside className="sidebar">
       <div className="brand-block">
@@ -51,13 +73,17 @@ export default function Sidebar(){
 
       <div className="sidebar-footer">
         <div className="mini-profile">
-          <div className="avatar">AO</div>
+          {customAvatar ? (
+            <img src={customAvatar} alt={displayName} className="mini-avatar-img" />
+          ) : (
+            <div className="avatar">{initials}</div>
+          )}
           <div>
-            <div className="mini-name">Administrator</div>
+            <div className="mini-name">{displayName}</div>
             <div className="mini-role">Waste Officer</div>
           </div>
         </div>
-        <button type="button" className="logout-button">
+        <button type="button" className="logout-button" onClick={logout}>
           <LogOut size={16} />
           <span>Logout</span>
         </button>
@@ -65,3 +91,4 @@ export default function Sidebar(){
     </aside>
   )
 }
+

@@ -15,10 +15,15 @@ class TruckModel extends TruckEntity {
     );
   }
 
+  factory TruckModel.fromApi(Map<String, dynamic> map) {
+    return TruckModel(
+      id: (map['id'] ?? '').toString(),
+      capacity: (map['capacity'] ?? 0).toString(),
+      status: (map['status'] ?? '').toString(),
+    );
+  }
+
   Map<String, dynamic> toMap() {
-    return {
-      'capacity': capacity,
-      'status': status,
-    };
+    return {'capacity': capacity, 'status': status};
   }
 }
