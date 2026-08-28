@@ -28,7 +28,15 @@ export async function listTasks(filter) {
   if (filter && filter.status) where.status = filter.status;
   if (filter && filter.driverId) where.driverId = Number(filter.driverId);
 
-  return prisma.collectionTask.findMany({ where, include: { bin: true, driver: { select: { id: true, firstName: true, lastName: true } }, truck: true } });
+  return prisma.collectionTask.findMany({
+    where,
+    include: {
+      bin: true,
+      driver: { select: { id: true, firstName: true, lastName: true, email: true } },
+      truck: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
 }
 
 export async function getTask(id) {
@@ -37,6 +45,50 @@ export async function getTask(id) {
 
 export async function updateTask(id, data) {
   return prisma.collectionTask.update({ where: { id: Number(id) }, data });
+}
+
+export async function deleteTask(id, adminUser) {
+  const task = await prisma.collectionTask.findUnique({
+    where: { id: Number(id) },
+    include: { bin: true, driver: true, truck: true },
+  });
+  if (!task) throw { status: 404, message: "Task not found" };
+
+  const adminName = adminUser ? `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim() : 'Administrator';
+  const adminEmail = adminUser?.email || 'admin';
+  const adminInfo = `${adminName} (${adminEmail})`;
+  const now = new Date();
+  const auditNote = `[DELETED] Deleted by Admin: ${adminInfo} on ${now.toISOString()}. Original status: ${task.status}.`;
+  const combinedNotes = task.notes ? `${task.notes}\n${auditNote}` : auditNote;
+
+  // Soft delete / cancel the task
+  const updated = await prisma.collectionTask.update({
+    where: { id: Number(id) },
+    data: {
+      status: "CANCELLED",
+      notes: combinedNotes,
+    },
+    include: { bin: true, driver: { select: { id: true, firstName: true, lastName: true } }, truck: true },
+  });
+
+  // Preserve in collection audit history
+  try {
+    await prisma.collectionHistory.create({
+      data: {
+        taskId: task.id,
+        binId: task.binId,
+        driverId: task.driverId,
+        collectedAt: now,
+        fillLevelBefore: task.bin ? task.bin.currentFillLevel : null,
+        fillLevelAfter: task.bin ? task.bin.currentFillLevel : null,
+        notes: `[DELETED] Deleted by Admin: ${adminInfo}. Original Status: ${task.status}`,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to record collection history audit entry:", err);
+  }
+
+  return updated;
 }
 
 export async function setTaskStatus(id, status) {

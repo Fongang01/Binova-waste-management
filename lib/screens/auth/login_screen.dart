@@ -262,9 +262,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showServerConfigDialog() {
     final controller = TextEditingController(text: ApiConfig.baseUrl);
-    bool testing = false;
-    String? testResult;
-    bool? testSuccess;
+    bool probing = false;
+    DiagnosticReport? report;
 
     showModalBottomSheet(
       context: context,
@@ -291,7 +290,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Backend Server Configuration',
+                        'Backend Network Diagnostics',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                       IconButton(
@@ -300,44 +299,54 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Select or enter the URL where the BINOVA Node.js backend is running.',
-                    style: TextStyle(color: AppTheme.greyText, fontSize: 12),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Current Server: ${ApiConfig.baseUrl}',
+                    style: const TextStyle(color: AppTheme.greyText, fontSize: 12),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: controller,
                     decoration: InputDecoration(
                       labelText: 'Server Base URL',
-                      hintText: 'http://192.168.4.77:3000',
+                      hintText: 'http://<PC-LAN-IP>:3000',
                       prefixIcon: const Icon(Icons.dns_outlined),
                       suffixIcon: IconButton(
-                        icon: testing
+                        icon: probing
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Icon(Icons.refresh),
+                            : const Icon(Icons.search_rounded),
                         onPressed: () async {
                           setModalState(() {
-                            testing = true;
-                            testResult = null;
-                            testSuccess = null;
+                            probing = true;
+                            report = null;
                           });
-                          final working = await ApiConfig.probeBestUrl();
-                          if (working != null) {
-                            controller.text = working;
-                            testResult = 'Auto-detected active server: $working';
-                            testSuccess = true;
+                          final found = await ApiConfig.discoverLanBackend();
+                          if (found != null) {
+                            controller.text = found;
+                            final rep = await ApiConfig.testConnectionDetails(found);
+                            setModalState(() {
+                              probing = false;
+                              report = rep;
+                            });
                           } else {
-                            testResult = 'Auto-detect failed. Enter IP manually.';
-                            testSuccess = false;
+                            setModalState(() {
+                              probing = false;
+                              report = const DiagnosticReport(
+                                status: NetworkDiagnosticStatus.unknownError,
+                                isSuccess: false,
+                                title: 'Auto-Discovery Failed',
+                                message: 'Could not auto-detect backend. Please enter your PC\'s Wi-Fi IP manually.',
+                                suggestions: [
+                                  'Run "ipconfig" on your PC to find your IPv4 address',
+                                  'Enter format: http://192.168.x.x:3000',
+                                ],
+                              );
+                            });
                           }
-                          setModalState(() {
-                            testing = false;
-                          });
                         },
                       ),
                     ),
@@ -348,62 +357,83 @@ class _LoginScreenState extends State<LoginScreen> {
                     runSpacing: 6,
                     children: [
                       ActionChip(
-                        label: const Text('Wi-Fi LAN (192.168.4.77)'),
-                        onPressed: () {
-                          controller.text = ApiConfig.lanWifiUrl;
-                          setModalState(() {
-                            testResult = null;
-                          });
-                        },
-                      ),
-                      ActionChip(
-                        label: const Text('USB ADB (127.0.0.1)'),
-                        onPressed: () {
-                          controller.text = ApiConfig.localhostUrl;
-                          setModalState(() {
-                            testResult = null;
-                          });
-                        },
-                      ),
-                      ActionChip(
+                        avatar: const Icon(Icons.devices_rounded, size: 14),
                         label: const Text('Emulator (10.0.2.2)'),
                         onPressed: () {
                           controller.text = ApiConfig.emulatorDefaultUrl;
-                          setModalState(() {
-                            testResult = null;
-                          });
+                          setModalState(() => report = null);
+                        },
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.usb_rounded, size: 14),
+                        label: const Text('USB ADB (127.0.0.1)'),
+                        onPressed: () {
+                          controller.text = ApiConfig.localhostUrl;
+                          setModalState(() => report = null);
                         },
                       ),
                     ],
                   ),
-                  if (testResult != null) ...[
-                    const SizedBox(height: 12),
+                  if (report != null) ...[
+                    const SizedBox(height: 14),
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: testSuccess == true ? Colors.green.shade50 : Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(10),
+                        color: report!.isSuccess ? Colors.green.shade50 : Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: testSuccess == true ? Colors.green.shade300 : Colors.red.shade300,
+                          color: report!.isSuccess ? Colors.green.shade300 : Colors.red.shade300,
                         ),
                       ),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            testSuccess == true ? Icons.check_circle : Icons.error_outline,
-                            color: testSuccess == true ? Colors.green : Colors.red,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              testResult!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: testSuccess == true ? Colors.green.shade900 : Colors.red.shade900,
+                          Row(
+                            children: [
+                              Icon(
+                                report!.isSuccess ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+                                color: report!.isSuccess ? Colors.green.shade700 : Colors.red.shade700,
+                                size: 18,
                               ),
+                              const SizedBox(width: 8),
+                              Text(
+                                report!.title,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: report!.isSuccess ? Colors.green.shade900 : Colors.red.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            report!.message,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: report!.isSuccess ? Colors.green.shade900 : Colors.red.shade900,
                             ),
                           ),
+                          if (report!.suggestions.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            ...report!.suggestions.map(
+                              (s) => Padding(
+                                padding: const EdgeInsets.only(bottom: 2),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('• ', style: TextStyle(fontSize: 11, color: Colors.red.shade800)),
+                                    Expanded(
+                                      child: Text(
+                                        s,
+                                        style: TextStyle(fontSize: 11, color: Colors.red.shade800),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -413,20 +443,17 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: testing
+                          onPressed: probing
                               ? null
                               : () async {
                                   setModalState(() {
-                                    testing = true;
-                                    testResult = null;
+                                    probing = true;
+                                    report = null;
                                   });
-                                  final ok = await ApiConfig.testUrl(controller.text);
+                                  final rep = await ApiConfig.testConnectionDetails(controller.text);
                                   setModalState(() {
-                                    testing = false;
-                                    testSuccess = ok;
-                                    testResult = ok
-                                        ? 'Connection successful! (HTTP 200 OK)'
-                                        : 'Could not connect to ${controller.text}';
+                                    probing = false;
+                                    report = rep;
                                   });
                                 },
                           child: const Text('Test Connection'),
@@ -443,17 +470,18 @@ class _LoginScreenState extends State<LoginScreen> {
                             final target = controller.text.trim();
                             if (target.isNotEmpty) {
                               await ApiConfig.setBaseUrl(target);
-                              if (mounted) setState(() {});
+                              if (!mounted) return;
+                              setState(() {});
                               Navigator.pop(ctx);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Server set to: $target'),
+                                  content: Text('Server endpoint saved: $target'),
                                   behavior: SnackBarBehavior.floating,
                                 ),
                               );
                             }
                           },
-                          child: const Text('Save'),
+                          child: const Text('Save & Apply'),
                         ),
                       ),
                     ],

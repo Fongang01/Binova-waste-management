@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'app.dart';
 import 'core/config/api_config.dart';
+import 'core/config/mapbox_config.dart';
 export 'app.dart';
 
 // Auth Dependencies
@@ -34,8 +35,9 @@ void main() async {
   // Initialize network API config & probe responsive host
   try {
     await ApiConfig.init();
+    await MapboxConfig.init();
   } catch (e) {
-    debugPrint('ApiConfig init error: $e');
+    debugPrint('Config init error: $e');
   }
 
   // Auth/Data sources: use REST API implementations

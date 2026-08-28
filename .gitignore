@@ -37,3 +37,5 @@ Thumbs.db
 admin-dashboard_backup/
 *.backup
 admin-dashboard/src/login-styles.txt
+# Local Mapbox configuration
+lib/core/config/mapbox_config.dart

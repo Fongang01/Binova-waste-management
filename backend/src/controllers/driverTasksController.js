@@ -2,7 +2,14 @@ import prisma from "../config/prisma.js";
 
 export async function listMyTasks(req, res, next) {
   try {
-    const tasks = await prisma.collectionTask.findMany({ where: { driverId: req.user.id }, include: { bin: true, truck: true } });
+    const tasks = await prisma.collectionTask.findMany({
+      where: {
+        driverId: req.user.id,
+        status: { not: "CANCELLED" },
+      },
+      include: { bin: true, truck: true },
+      orderBy: { createdAt: "desc" },
+    });
     res.json({ success: true, data: tasks });
   } catch (err) {
     next(err);

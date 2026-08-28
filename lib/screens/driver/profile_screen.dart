@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/config/api_config.dart';
 import '../../core/network/api_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
@@ -167,6 +168,22 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     subtitle: const Text('Ensure secure agent access', style: TextStyle(fontSize: 12, color: AppTheme.greyText)),
                     trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.greyText),
                     onTap: () => _showChangePasswordDialog(context),
+                  ),
+                  const Divider(height: 16),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryGreen.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.dns_rounded, color: AppTheme.primaryGreen, size: 20),
+                    ),
+                    title: const Text('Backend Server & Network', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: Text('Current: ${ApiConfig.baseUrl}', style: const TextStyle(fontSize: 12, color: AppTheme.greyText)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.greyText),
+                    onTap: () => _showServerDiagnosticsDialog(context),
                   ),
                 ],
               ),
@@ -464,6 +481,241 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showServerDiagnosticsDialog(BuildContext context) {
+    final controller = TextEditingController(text: ApiConfig.baseUrl);
+    bool probing = false;
+    DiagnosticReport? report;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Backend Network Diagnostics',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Current Server: ${ApiConfig.baseUrl}',
+                    style: const TextStyle(color: AppTheme.greyText, fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    decoration: InputDecoration(
+                      labelText: 'Server Base URL',
+                      hintText: 'http://<PC-LAN-IP>:3000',
+                      prefixIcon: const Icon(Icons.dns_outlined),
+                      suffixIcon: IconButton(
+                        icon: probing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.search_rounded),
+                        onPressed: () async {
+                          setModalState(() {
+                            probing = true;
+                            report = null;
+                          });
+                          final found = await ApiConfig.discoverLanBackend();
+                          if (found != null) {
+                            controller.text = found;
+                            final rep = await ApiConfig.testConnectionDetails(found);
+                            setModalState(() {
+                              probing = false;
+                              report = rep;
+                            });
+                          } else {
+                            setModalState(() {
+                              probing = false;
+                              report = const DiagnosticReport(
+                                status: NetworkDiagnosticStatus.unknownError,
+                                isSuccess: false,
+                                title: 'Auto-Discovery Failed',
+                                message: 'Could not auto-detect backend. Please enter your PC\'s Wi-Fi IP manually.',
+                                suggestions: [
+                                  'Run "ipconfig" on your PC to find your IPv4 address',
+                                  'Enter format: http://192.168.x.x:3000',
+                                ],
+                              );
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      ActionChip(
+                        avatar: const Icon(Icons.devices_rounded, size: 14),
+                        label: const Text('Emulator (10.0.2.2)'),
+                        onPressed: () {
+                          controller.text = ApiConfig.emulatorDefaultUrl;
+                          setModalState(() => report = null);
+                        },
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.usb_rounded, size: 14),
+                        label: const Text('USB ADB (127.0.0.1)'),
+                        onPressed: () {
+                          controller.text = ApiConfig.localhostUrl;
+                          setModalState(() => report = null);
+                        },
+                      ),
+                    ],
+                  ),
+                  if (report != null) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: report!.isSuccess ? Colors.green.shade50 : Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: report!.isSuccess ? Colors.green.shade300 : Colors.red.shade300,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                report!.isSuccess ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+                                color: report!.isSuccess ? Colors.green.shade700 : Colors.red.shade700,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                report!.title,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: report!.isSuccess ? Colors.green.shade900 : Colors.red.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            report!.message,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: report!.isSuccess ? Colors.green.shade900 : Colors.red.shade900,
+                            ),
+                          ),
+                          if (report!.suggestions.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            ...report!.suggestions.map(
+                              (s) => Padding(
+                                padding: const EdgeInsets.only(bottom: 2),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('• ', style: TextStyle(fontSize: 11, color: Colors.red.shade800)),
+                                    Expanded(
+                                      child: Text(
+                                        s,
+                                        style: TextStyle(fontSize: 11, color: Colors.red.shade800),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: probing
+                              ? null
+                              : () async {
+                                  setModalState(() {
+                                    probing = true;
+                                    report = null;
+                                  });
+                                  final rep = await ApiConfig.testConnectionDetails(controller.text);
+                                  setModalState(() {
+                                    probing = false;
+                                    report = rep;
+                                  });
+                                },
+                          child: const Text('Test Connection'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryEmerald,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () async {
+                            final target = controller.text.trim();
+                            if (target.isNotEmpty) {
+                              await ApiConfig.setBaseUrl(target);
+                              if (!mounted) return;
+                              setState(() {});
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Server endpoint saved: $target'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
+                          child: const Text('Save & Apply'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

@@ -812,6 +812,14 @@ label {
   color: #1d4ed8;
 }
 
+.status-cancelled,
+.status-deleted {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+
 .login-shell {
   display: flex;
   min-height: 100vh;

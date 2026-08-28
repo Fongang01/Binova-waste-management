@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Sidebar from '../components/Layout/Sidebar'
 import Topbar from '../components/Layout/Topbar'
-import { getCollectionTasks, createCollectionTask } from '../api/collectionTasksApi'
+import { getCollectionTasks, createCollectionTask, deleteCollectionTask } from '../api/collectionTasksApi'
 import { getBins } from '../api/binsApi'
 import { getDrivers } from '../api/driversApi'
 import { getTrucks } from '../api/trucksApi'
@@ -16,7 +16,10 @@ import {
   AlertCircle,
   Truck as TruckIcon,
   User,
-  Trash2
+  Trash2,
+  History,
+  Archive,
+  AlertTriangle
 } from 'lucide-react'
 
 const INITIAL_FORM = {
@@ -57,11 +60,17 @@ export default function Collections(){
   const [reviewTask, setReviewTask] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
+  // Delete Modal State
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [taskToDelete, setTaskToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
   // Sync URL query params
   useEffect(() => {
     const s = searchParams.get('status')?.toUpperCase()
-    if (s && ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'ALL'].includes(s)) {
-      setStatusFilter(s)
+    if (s && ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'DELETED', 'ALL'].includes(s)) {
+      setStatusFilter(s === 'DELETED' ? 'CANCELLED' : s)
     }
   }, [searchParams])
 
@@ -104,7 +113,11 @@ export default function Collections(){
   const filteredTasks = useMemo(() => {
     return items.filter((task) => {
       // Status Filter
-      if (statusFilter !== 'ALL' && task.status !== statusFilter) {
+      if (statusFilter === 'ALL') {
+        if (task.status === 'CANCELLED') return false
+      } else if (statusFilter === 'CANCELLED' || statusFilter === 'DELETED') {
+        if (task.status !== 'CANCELLED') return false
+      } else if (task.status !== statusFilter) {
         return false
       }
 
@@ -205,6 +218,31 @@ export default function Collections(){
     }
   }
 
+  const openDeleteModal = (task, event) => {
+    event?.stopPropagation()
+    setTaskToDelete(task)
+    setDeleteError('')
+    setDeleteModalOpen(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!taskToDelete) return
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await deleteCollectionTask(taskToDelete.id)
+      setSuccess(`Collection task #${taskToDelete.id} deleted and recorded in history.`)
+      setDeleteModalOpen(false)
+      setTaskToDelete(null)
+      window.dispatchEvent(new CustomEvent('binova:refresh-summary'))
+      await load()
+    } catch (e) {
+      setDeleteError(e?.response?.data?.message || 'Unable to delete collection task.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const renderEmptyState = () => {
     if (loading) return null
     if (items.length === 0) {
@@ -221,17 +259,33 @@ export default function Collections(){
           </div>
         )
       }
+      if (statusFilter === 'CANCELLED' || statusFilter === 'DELETED') {
+        return (
+          <div className="page-empty">
+            <p>No deleted collection tasks in history.</p>
+            <button type="button" className="btn btn-secondary" onClick={() => handleStatusFilterChange('ALL')}>
+              Show Active Tasks
+            </button>
+          </div>
+        )
+      }
       return (
         <div className="page-empty">
           <p>No {statusFilter.toLowerCase()} collection tasks found.</p>
           <button type="button" className="btn btn-secondary" onClick={() => handleStatusFilterChange('ALL')}>
-            Show All Tasks
+            Show All Active Tasks
           </button>
         </div>
       )
     }
     return null
   }
+
+  const activeCount = items.filter(t => t.status !== 'CANCELLED').length
+  const assignedCount = items.filter(t => t.status === 'ASSIGNED').length
+  const inProgressCount = items.filter(t => t.status === 'IN_PROGRESS').length
+  const completedCount = items.filter(t => t.status === 'COMPLETED').length
+  const deletedCount = items.filter(t => t.status === 'CANCELLED').length
 
   return (
     <div className="app-shell">
@@ -368,28 +422,36 @@ export default function Collections(){
                 className={`filter-pill ${statusFilter === 'ALL' ? 'active' : ''}`}
                 onClick={() => handleStatusFilterChange('ALL')}
               >
-                All ({items.length})
+                All Active ({activeCount})
               </button>
               <button
                 type="button"
                 className={`filter-pill ${statusFilter === 'ASSIGNED' ? 'active' : ''}`}
                 onClick={() => handleStatusFilterChange('ASSIGNED')}
               >
-                Pending / Assigned ({items.filter(t => t.status === 'ASSIGNED').length})
+                Pending / Assigned ({assignedCount})
               </button>
               <button
                 type="button"
                 className={`filter-pill ${statusFilter === 'IN_PROGRESS' ? 'active' : ''}`}
                 onClick={() => handleStatusFilterChange('IN_PROGRESS')}
               >
-                In Progress ({items.filter(t => t.status === 'IN_PROGRESS').length})
+                In Progress ({inProgressCount})
               </button>
               <button
                 type="button"
                 className={`filter-pill ${statusFilter === 'COMPLETED' ? 'active' : ''}`}
                 onClick={() => handleStatusFilterChange('COMPLETED')}
               >
-                Completed ({items.filter(t => t.status === 'COMPLETED').length})
+                Completed ({completedCount})
+              </button>
+              <button
+                type="button"
+                className={`filter-pill ${statusFilter === 'CANCELLED' ? 'active' : ''}`}
+                onClick={() => handleStatusFilterChange('CANCELLED')}
+                style={{ borderColor: statusFilter === 'CANCELLED' ? '#ef4444' : undefined }}
+              >
+                <Archive size={13} /> Deleted History ({deletedCount})
               </button>
             </div>
 
@@ -431,53 +493,90 @@ export default function Collections(){
                       <th>Priority</th>
                       <th>Status</th>
                       <th>Created</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredTasks.map((task) => (
-                      <tr key={task.id}>
-                        <td>
-                          <span className="font-semibold text-dark font-mono text-xs">#{task.id}</span>
-                        </td>
-                        <td>
-                          <div>
-                            <div className="font-semibold text-dark">{task.bin ? (task.bin.binCode || task.bin.code) : '—'}</div>
-                            <div className="text-muted text-xs">{task.bin?.address || 'No address recorded'}</div>
-                          </div>
-                        </td>
-                        <td>
-                          {task.driver ? (
-                            <div className="flex-align-center gap-6">
-                              <User size={14} className="text-muted" />
-                              <span>{task.driver.firstName} {task.driver.lastName}</span>
+                    {filteredTasks.map((task) => {
+                      const isDeleted = task.status === 'CANCELLED'
+                      return (
+                        <tr key={task.id} style={{ opacity: isDeleted ? 0.85 : 1 }}>
+                          <td>
+                            <span className="font-semibold text-dark font-mono text-xs">#{task.id}</span>
+                          </td>
+                          <td>
+                            <div>
+                              <div className="font-semibold text-dark">{task.bin ? (task.bin.binCode || task.bin.code) : '—'}</div>
+                              <div className="text-muted text-xs">{task.bin?.address || 'No address recorded'}</div>
                             </div>
-                          ) : (
-                            <span className="text-muted text-xs">Unassigned</span>
-                          )}
-                        </td>
-                        <td>
-                          {task.truck ? (
-                            <div className="flex-align-center gap-6">
-                              <TruckIcon size={14} className="text-muted" />
-                              <span>{task.truck.registrationNumber || task.truck.registration}</span>
+                          </td>
+                          <td>
+                            {task.driver ? (
+                              <div className="flex-align-center gap-6">
+                                <User size={14} className="text-muted" />
+                                <span>{task.driver.firstName} {task.driver.lastName}</span>
+                              </div>
+                            ) : (
+                              <span className="text-muted text-xs">Unassigned</span>
+                            )}
+                          </td>
+                          <td>
+                            {task.truck ? (
+                              <div className="flex-align-center gap-6">
+                                <TruckIcon size={14} className="text-muted" />
+                                <span>{task.truck.registrationNumber || task.truck.registration}</span>
+                              </div>
+                            ) : (
+                              <span className="text-muted text-xs">—</span>
+                            )}
+                          </td>
+                          <td>
+                            <span className={`status-badge status-${(task.priority || 'NORMAL').toLowerCase()}`}>
+                              {task.priority || 'NORMAL'}
+                            </span>
+                          </td>
+                          <td>
+                            {isDeleted ? (
+                              <span className="status-badge status-cancelled" title={task.notes || 'Deleted by Administrator'}>
+                                DELETED
+                              </span>
+                            ) : (
+                              <span className={`status-badge status-${(task.status || 'ASSIGNED').toLowerCase()}`}>
+                                {task.status || 'ASSIGNED'}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <div>
+                              <div>{task.createdAt ? new Date(task.createdAt).toLocaleDateString() : '—'}</div>
+                              {isDeleted && task.notes && task.notes.includes('[DELETED]') && (
+                                <div className="text-muted text-xs font-mono" style={{ color: '#ef4444' }}>
+                                  Archived
+                                </div>
+                              )}
                             </div>
-                          ) : (
-                            <span className="text-muted text-xs">—</span>
-                          )}
-                        </td>
-                        <td>
-                          <span className={`status-badge status-${(task.priority || 'NORMAL').toLowerCase()}`}>
-                            {task.priority || 'NORMAL'}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`status-badge status-${(task.status || 'ASSIGNED').toLowerCase()}`}>
-                            {task.status || 'ASSIGNED'}
-                          </span>
-                        </td>
-                        <td>{task.createdAt ? new Date(task.createdAt).toLocaleDateString() : '—'}</td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td>
+                            {isDeleted ? (
+                              <span className="muted-badge" title={task.notes || 'Recorded in History'}>
+                                Recorded in History
+                              </span>
+                            ) : (
+                              <div className="row-actions">
+                                <button
+                                  type="button"
+                                  className="table-action danger"
+                                  onClick={(e) => openDeleteModal(task, e)}
+                                  title="Delete collection task"
+                                >
+                                  <Trash2 size={14} /> Delete
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -485,6 +584,100 @@ export default function Collections(){
           )}
         </div>
       </div>
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {deleteModalOpen && taskToDelete && (
+        <div className="modal-backdrop" onClick={() => !deleting && setDeleteModalOpen(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow" style={{ color: '#ef4444' }}>Confirm Task Deletion</p>
+                <h3>Delete Collection Task #{taskToDelete.id}?</h3>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => !deleting && setDeleteModalOpen(false)}
+                aria-label="Close modal"
+                disabled={deleting}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="details-card-body">
+              <div className="alert-banner" style={{ background: '#fef2f2', borderColor: '#fecaca', color: '#991b1b', marginBottom: 16 }}>
+                <AlertTriangle size={20} color="#dc2626" />
+                <div>
+                  <strong>Attention Required</strong>
+                  <p style={{ margin: 0, fontSize: 13 }}>
+                    This task will be removed from active collection operations. The deletion will be recorded in the collection history.
+                  </p>
+                </div>
+              </div>
+
+              <div className="details-grid" style={{ marginBottom: 16 }}>
+                <div className="detail-item">
+                  <span className="detail-label">Task ID</span>
+                  <span className="detail-value font-mono font-bold">#{taskToDelete.id}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Target Bin</span>
+                  <span className="detail-value font-bold">
+                    {taskToDelete.bin?.binCode || taskToDelete.bin?.code || `Bin #${taskToDelete.binId}`}
+                  </span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Assigned Driver</span>
+                  <span className="detail-value">
+                    {taskToDelete.driver ? `${taskToDelete.driver.firstName} ${taskToDelete.driver.lastName}` : 'Unassigned'}
+                  </span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Vehicle</span>
+                  <span className="detail-value">
+                    {taskToDelete.truck ? (taskToDelete.truck.registrationNumber || taskToDelete.truck.registration) : 'None'}
+                  </span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Original Status</span>
+                  <span className={`status-badge status-${(taskToDelete.status || 'ASSIGNED').toLowerCase()}`}>
+                    {taskToDelete.status}
+                  </span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Priority</span>
+                  <span className={`status-badge status-${(taskToDelete.priority || 'NORMAL').toLowerCase()}`}>
+                    {taskToDelete.priority}
+                  </span>
+                </div>
+              </div>
+
+              {deleteError && <div className="error-box" style={{ marginBottom: 14 }}>{deleteError}</div>}
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setDeleteModalOpen(false)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ background: '#dc2626', borderColor: '#dc2626' }}
+                  onClick={handleConfirmDelete}
+                  disabled={deleting}
+                >
+                  <Trash2 size={16} /> {deleting ? 'Deleting Task...' : 'Delete Task'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

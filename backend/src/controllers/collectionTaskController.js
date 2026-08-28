@@ -47,3 +47,13 @@ export async function setTaskStatus(req, res, next) {
     next(err);
   }
 }
+
+export async function deleteTask(req, res, next) {
+  try {
+    const task = await taskService.deleteTask(req.params.id, req.user);
+    res.json({ success: true, message: "Collection task deleted successfully", data: task });
+  } catch (err) {
+    next(err);
+  }
+}
+
