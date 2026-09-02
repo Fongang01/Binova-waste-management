@@ -202,39 +202,166 @@ class DriverHomeScreen extends StatelessWidget {
                         ),
 
                       const SizedBox(height: 32),
-                      Text(
-                        'AI Optimized Route',
-                        style: Theme.of(context).textTheme.titleLarge,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'AI Optimized Route',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          if (driverNotifier.activeAiTask != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryEmerald.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: AppTheme.primaryEmerald.withOpacity(0.3)),
+                              ),
+                              child: Text(
+                                '${driverNotifier.activeAiTask!.pendingStopsCount} Pending',
+                                style: const TextStyle(
+                                  color: AppTheme.primaryEmerald,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 12),
-                      // Fancy Glass Card for AI
-                      BinovaCard(
-                        useGlass: true,
-                        padding: const EdgeInsets.all(20),
-                        border: Border.all(color: AppTheme.primaryEmerald.withOpacity(0.05)),
-                        onTap: () => context.push(AppRoutes.driverRoute),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                gradient: AppTheme.primaryGradient,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(color: AppTheme.primaryEmerald.withOpacity(0.2), blurRadius: 10)
-                                ]
+                      // Glass Card for AI Route
+                      Builder(
+                        builder: (context) {
+                          final aiTask = driverNotifier.activeAiTask;
+                          if (aiTask != null) {
+                            return BinovaCard(
+                              useGlass: true,
+                              padding: const EdgeInsets.all(18),
+                              border: Border.all(color: AppTheme.primaryEmerald.withOpacity(0.25)),
+                              onTap: () => context.push(AppRoutes.driverRoute),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          gradient: AppTheme.primaryGradient,
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(color: AppTheme.primaryEmerald.withOpacity(0.25), blurRadius: 8)
+                                          ]
+                                        ),
+                                        child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 24),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                const Text(
+                                                  'AI DISPATCHED ROUTE',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w800,
+                                                    letterSpacing: 0.8,
+                                                    color: AppTheme.primaryEmerald,
+                                                  ),
+                                                ),
+                                                const Spacer(),
+                                                Text(
+                                                  '${aiTask.totalStops} Stops Total',
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: AppTheme.darkText,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '${aiTask.distanceKm ?? 0} km • Est. ${aiTask.estimatedDuration ?? 0} min',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.grey.shade700,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.7),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: Colors.grey.shade200),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.navigation_rounded,
+                                          size: 18,
+                                          color: AppTheme.primaryEmerald,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            aiTask.currentStop != null
+                                                ? 'Next: Stop #${aiTask.currentStopNumber} — ${aiTask.currentStop!.binCode} (${aiTask.currentStop!.fillLevel}%)'
+                                                : 'All route stops completed',
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppTheme.darkText,
+                                            ),
+                                          ),
+                                        ),
+                                        const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppTheme.primaryEmerald),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
-                              child: const Icon(Icons.psychology_rounded, color: Colors.white, size: 32),
+                            );
+                          }
+
+                          return BinovaCard(
+                            useGlass: true,
+                            padding: const EdgeInsets.all(20),
+                            border: Border.all(color: AppTheme.primaryEmerald.withOpacity(0.05)),
+                            onTap: () => context.push(AppRoutes.driverRoute),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    gradient: AppTheme.primaryGradient,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(color: AppTheme.primaryEmerald.withOpacity(0.2), blurRadius: 10)
+                                    ]
+                                  ),
+                                  child: const Icon(Icons.psychology_rounded, color: Colors.white, size: 32),
+                                ),
+                                const SizedBox(width: 16),
+                                const Expanded(
+                                  child: Text(
+                                    'No active AI route. Optimized routes will appear here when assigned by admin.',
+                                    style: TextStyle(fontSize: 13, height: 1.5, color: AppTheme.darkText, fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 16),
-                            const Expanded(
-                              child: Text(
-                                'Your optimized collection route will appear here when a task is assigned.',
-                                style: TextStyle(fontSize: 13, height: 1.5, color: AppTheme.darkText, fontWeight: FontWeight.w500),
-                              ),
-                            ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
 
                       const SizedBox(height: 32),

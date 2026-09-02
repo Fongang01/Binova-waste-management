@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Layout/Sidebar'
 import Topbar from '../components/Layout/Topbar'
 import { getCollectionTasks, createCollectionTask, deleteCollectionTask } from '../api/collectionTasksApi'
@@ -19,7 +19,8 @@ import {
   Trash2,
   History,
   Archive,
-  AlertTriangle
+  AlertTriangle,
+  Sparkles
 } from 'lucide-react'
 
 const INITIAL_FORM = {
@@ -40,6 +41,7 @@ function normalizeList(response) {
 
 export default function Collections(){
   const [searchParams, setSearchParams] = useSearchParams()
+  const nav = useNavigate()
   const [items, setItems] = useState([])
   const [bins, setBins] = useState([])
   const [drivers, setDrivers] = useState([])
@@ -301,6 +303,9 @@ export default function Collections(){
             <div className="page-actions">
               <button type="button" className="btn btn-secondary" onClick={load} disabled={loading}>
                 <RefreshCcw size={16} className={loading ? 'spinning' : ''} /> Refresh
+              </button>
+              <button type="button" className="btn btn-primary" onClick={() => nav('/ai-planning')}>
+                <Sparkles size={16} /> AI Route Planning
               </button>
             </div>
           </div>

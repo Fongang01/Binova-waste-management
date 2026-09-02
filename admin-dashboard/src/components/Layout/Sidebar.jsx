@@ -9,6 +9,7 @@ import {
   Map,
   Settings,
   LogOut,
+  Sparkles,
 } from 'lucide-react'
 import { clearSession } from '../../utils/auth'
 
@@ -18,6 +19,7 @@ const navItems = [
   { to: '/drivers', label: 'Drivers', icon: Users },
   { to: '/trucks', label: 'Trucks', icon: Truck },
   { to: '/collections', label: 'Collections', icon: ClipboardList },
+  { to: '/ai-planning', label: 'AI Planning', icon: Sparkles },
   { to: '/map', label: 'Map', icon: Map }
 ]
 

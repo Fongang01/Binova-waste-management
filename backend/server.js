@@ -10,6 +10,7 @@ import collectionTaskRoutes from "./src/routes/collectionTaskRoutes.js";
 import dashboardRoutes from "./src/routes/dashboardRoutes.js";
 import sensorRoutes from "./src/routes/sensorRoutes.js";
 import driverTaskRoutes from "./src/routes/driverTaskRoutes.js";
+import aiPlanningRoutes from "./src/routes/aiPlanningRoutes.js";
 import errorHandler from "./src/middleware/errorMiddleware.js";
 
 const app = express();
@@ -37,6 +38,7 @@ app.use("/api/collection-tasks", collectionTaskRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/sensors", sensorRoutes);
 app.use("/api/driver/tasks", driverTaskRoutes);
+app.use("/api/ai-planning", aiPlanningRoutes);
 
 app.use(errorHandler);
 

@@ -16,6 +16,10 @@ class DriverRepositoryImpl implements DriverRepository {
       remoteDataSource.updateTaskStatus(taskId, status);
 
   @override
+  Future<void> completeStop(String taskId, int stopId) =>
+      remoteDataSource.completeStop(taskId, stopId);
+
+  @override
   Future<TruckEntity?> getAssignedTruck() => remoteDataSource.getAssignedTruck();
 
   @override

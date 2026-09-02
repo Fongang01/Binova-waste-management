@@ -45,5 +45,36 @@ export async function setBinStatus(id, status) {
 }
 
 export async function deleteBin(id) {
-  return prisma.bin.delete({ where: { id: Number(id) } });
+  const binId = Number(id);
+  const bin = await prisma.bin.findUnique({
+    where: { id: binId },
+    include: {
+      _count: {
+        select: {
+          tasks: true,
+          collectionHistory: true,
+        },
+      },
+    },
+  });
+
+  if (!bin) {
+    throw { status: 404, message: "Bin not found" };
+  }
+
+  const hasHistory = (bin._count?.tasks > 0) || (bin._count?.collectionHistory > 0);
+
+  if (hasHistory) {
+    throw {
+      status: 400,
+      code: "HAS_COLLECTION_HISTORY",
+      message: "This bin cannot be permanently deleted because it has collection history. Set the bin to INACTIVE instead to preserve historical records.",
+      binId,
+    };
+  }
+
+  // Safe to delete sensor readings since no operational collection history is attached
+  await prisma.sensorReading.deleteMany({ where: { binId } });
+
+  return prisma.bin.delete({ where: { id: binId } });
 }

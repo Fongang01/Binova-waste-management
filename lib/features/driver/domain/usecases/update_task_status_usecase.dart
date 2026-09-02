@@ -11,6 +11,10 @@ class UpdateTaskStatusUseCase implements UseCase<void, UpdateTaskStatusParams> {
   Future<void> call(UpdateTaskStatusParams params) {
     return repository.updateTaskStatus(params.taskId, params.status);
   }
+
+  Future<void> completeStop(String taskId, int stopId) {
+    return repository.completeStop(taskId, stopId);
+  }
 }
 
 class UpdateTaskStatusParams {

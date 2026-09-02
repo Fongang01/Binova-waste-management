@@ -80,12 +80,42 @@ class _TasksList extends StatelessWidget {
       itemCount: tasks.length,
       itemBuilder: (context, index) {
         final task = tasks[index];
+        final isAi = task.isAiOptimized;
+
         return BinovaCard(
           margin: const EdgeInsets.only(bottom: 16),
           padding: const EdgeInsets.all(20),
+          border: isAi ? Border.all(color: AppTheme.primaryEmerald.withOpacity(0.2)) : null,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header Tag / AI Badge
+              if (isAi)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryEmerald.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.auto_awesome_rounded, size: 14, color: AppTheme.primaryEmerald),
+                      const SizedBox(width: 6),
+                      Text(
+                        'AI MULTI-STOP ROUTE (${task.pendingStopsCount}/${task.totalStops} PENDING)',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: AppTheme.primaryEmerald,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -93,44 +123,99 @@ class _TasksList extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: AppTheme.primaryEmerald.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                        child: const Icon(Icons.delete_sweep_rounded, color: AppTheme.primaryEmerald, size: 20),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryEmerald.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          isAi ? Icons.alt_route_rounded : Icons.delete_sweep_rounded,
+                          color: AppTheme.primaryEmerald,
+                          size: 20,
+                        ),
                       ),
                       const SizedBox(width: 12),
-                      Text('Bin: ${task.binId}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                      Text(
+                        isAi
+                            ? (task.currentStop != null ? 'Stop #${task.currentStopNumber}: ${task.currentStop!.binCode}' : 'Route: ${task.totalStops} Stops')
+                            : 'Bin: ${task.binId}',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                      ),
                     ],
                   ),
-                  _buildPriorityBadge(task.priority),
+                  _buildPriorityBadge(isAi && task.currentStop != null ? task.currentStop!.priority : task.priority),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
+
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(Icons.location_on_rounded, color: AppTheme.greyText, size: 16),
                   const SizedBox(width: 4),
-                  Expanded(child: Text(task.location, style: const TextStyle(color: AppTheme.greyText, fontSize: 13, height: 1.4))),
+                  Expanded(
+                    child: Text(
+                      isAi && task.currentStop != null ? task.currentStop!.address : task.location,
+                      style: const TextStyle(color: AppTheme.greyText, fontSize: 13, height: 1.4),
+                    ),
+                  ),
                 ],
               ),
+
+              if (isAi) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(Icons.route_rounded, size: 14, color: AppTheme.primaryEmerald),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${task.distanceKm ?? 0} km • Est. ${task.estimatedDuration ?? 0} min total',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ],
+
               const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
+                padding: EdgeInsets.symmetric(vertical: 14),
                 child: Divider(height: 1, color: Color(0xFFF0F0F0)),
               ),
-               Row(
+
+              Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                   Column(
-                     crossAxisAlignment: CrossAxisAlignment.start,
-                     children: [
-                       const Text('Fill Level', style: TextStyle(color: AppTheme.greyText, fontSize: 11, fontWeight: FontWeight.w600)),
-                       Text('${task.fillLevel}%', style: TextStyle(
-                         color: task.fillLevel > 80 ? Colors.red : AppTheme.primaryEmerald,
-                         fontWeight: FontWeight.w900,
-                         fontSize: 18,
-                       )),
-                     ],
-                   ),
-                   _buildActionButton(context, task),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isAi ? 'Current Fill Level' : 'Fill Level',
+                        style: const TextStyle(color: AppTheme.greyText, fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        '${isAi && task.currentStop != null ? task.currentStop!.fillLevel : task.fillLevel}%',
+                        style: TextStyle(
+                          color: (isAi && task.currentStop != null ? task.currentStop!.fillLevel : task.fillLevel) > 80
+                              ? Colors.red
+                              : AppTheme.primaryEmerald,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      if (isAi && task.status != TaskStatus.completed)
+                        IconButton(
+                          icon: const Icon(Icons.map_rounded, color: AppTheme.primaryEmerald),
+                          tooltip: 'View on Map',
+                          onPressed: () {
+                            context.read<DriverNotifier>().setTabIndex(2);
+                          },
+                        ),
+                      const SizedBox(width: 4),
+                      _buildActionButton(context, task),
+                    ],
+                  ),
                 ],
               ),
             ],
@@ -160,21 +245,36 @@ class _TasksList extends StatelessWidget {
       );
     }
 
+    final isAi = task.isAiOptimized;
     final isAssigned = task.status == TaskStatus.assigned || task.status == TaskStatus.accepted;
-    final buttonLabel = isAssigned ? 'Start Task' : 'Complete';
-    final targetStatus = isAssigned ? TaskStatus.inProgress : TaskStatus.completed;
+
+    String buttonLabel = 'Start Task';
+    if (isAssigned) {
+      buttonLabel = isAi ? 'Start Route' : 'Start Task';
+    } else {
+      buttonLabel = isAi && task.currentStop != null ? 'Complete Stop #${task.currentStopNumber}' : 'Complete';
+    }
+
     final buttonColor = isAssigned ? AppTheme.primaryEmerald : const Color(0xFF2563EB);
 
     return ElevatedButton(
       onPressed: () async {
         final driverNotifier = context.read<DriverNotifier>();
-        await driverNotifier.updateStatus(task.id, targetStatus);
+        if (isAssigned) {
+          await driverNotifier.updateStatus(task.id, TaskStatus.inProgress);
+        } else {
+          if (isAi && task.currentStop != null) {
+            await driverNotifier.completeStop(task.id, task.currentStop!.id);
+          } else {
+            await driverNotifier.updateStatus(task.id, TaskStatus.completed);
+          }
+        }
       },
       style: ElevatedButton.styleFrom(
         backgroundColor: buttonColor,
         foregroundColor: Colors.white,
         elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
         minimumSize: const Size(0, 42),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),

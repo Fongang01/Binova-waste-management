@@ -52,13 +52,26 @@ export default function Bins(){
 
   // Modals
   const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [editModalOpen, setEditModalOpen] = useState(false)
   const [detailsModalOpen, setDetailsModalOpen] = useState(false)
   const [selectedBin, setSelectedBin] = useState(null)
+  const [binToEdit, setBinToEdit] = useState(null)
 
-  // Form State
+  // Safe Deletion Alternative Modal
+  const [safeDeleteModalOpen, setSafeDeleteModalOpen] = useState(false)
+  const [safeDeleteBin, setSafeDeleteBin] = useState(null)
+  const [safeDeleteMessage, setSafeDeleteMessage] = useState('')
+  const [deactivating, setDeactivating] = useState(false)
+
+  // Create Form State
   const [form, setForm] = useState(INITIAL_FORM)
   const [formError, setFormError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  // Edit Form State
+  const [editForm, setEditForm] = useState(INITIAL_FORM)
+  const [editFormError, setEditFormError] = useState('')
+  const [editing, setEditing] = useState(false)
 
   // Sync URL query params
   useEffect(() => {
@@ -184,17 +197,123 @@ export default function Bins(){
     }
   }
 
+  const openEditModal = (bin, event) => {
+    event?.stopPropagation()
+    setBinToEdit(bin)
+    setEditForm({
+      binCode: bin.binCode || bin.code || '',
+      latitude: String(bin.latitude ?? ''),
+      longitude: String(bin.longitude ?? ''),
+      address: bin.address || '',
+      capacity: String(bin.capacity ?? ''),
+      currentFillLevel: String(bin.currentFillLevel ?? '0'),
+      status: bin.status || 'ACTIVE',
+    })
+    setEditFormError('')
+    setEditModalOpen(true)
+  }
+
+  const handleEditSubmit = async (event) => {
+    event.preventDefault()
+    if (!binToEdit) return
+
+    if (!editForm.binCode.trim()) return setEditFormError('Bin code is required.')
+    if (!editForm.latitude && editForm.latitude !== '0') return setEditFormError('Latitude is required.')
+    if (!editForm.longitude && editForm.longitude !== '0') return setEditFormError('Longitude is required.')
+    const lat = Number(editForm.latitude)
+    const lng = Number(editForm.longitude)
+    if (isNaN(lat) || lat < -90 || lat > 90) return setEditFormError('Latitude must be between -90 and 90.')
+    if (isNaN(lng) || lng < -180 || lng > 180) return setEditFormError('Longitude must be between -180 and 180.')
+    if (!editForm.capacity || Number(editForm.capacity) <= 0) return setEditFormError('Capacity must be greater than zero.')
+    const fill = Number(editForm.currentFillLevel)
+    if (isNaN(fill) || fill < 0 || fill > 100) return setEditFormError('Current fill level must be between 0 and 100.')
+
+    setEditing(true)
+    setEditFormError('')
+
+    try {
+      await updateBin(binToEdit.id, {
+        binCode: editForm.binCode.trim(),
+        latitude: lat,
+        longitude: lng,
+        address: editForm.address.trim(),
+        capacity: Number(editForm.capacity),
+        currentFillLevel: fill,
+        status: editForm.status,
+      })
+
+      setSuccess(`Bin "${editForm.binCode}" updated successfully.`)
+      setEditModalOpen(false)
+      setBinToEdit(null)
+      if (selectedBin?.id === binToEdit.id) {
+        setSelectedBin((prev) => ({
+          ...prev,
+          binCode: editForm.binCode.trim(),
+          latitude: lat,
+          longitude: lng,
+          address: editForm.address.trim(),
+          capacity: Number(editForm.capacity),
+          currentFillLevel: fill,
+          status: editForm.status,
+        }))
+      }
+      window.dispatchEvent(new CustomEvent('binova:refresh-summary'))
+      await load()
+    } catch (e) {
+      setEditFormError(e?.response?.data?.message || 'Unable to update bin.')
+    } finally {
+      setEditing(false)
+    }
+  }
+
   const handleDelete = async (id, code, event) => {
     event?.stopPropagation()
+    const targetBin = bins.find((b) => b.id === id) || { id, binCode: code }
     if (!window.confirm(`Are you sure you want to delete bin "${code}"?`)) return
+
     try {
       await deleteBin(id)
-      setSuccess('Bin deleted successfully.')
+      setSuccess(`Bin "${code}" deleted permanently.`)
       if (selectedBin?.id === id) setDetailsModalOpen(false)
       window.dispatchEvent(new CustomEvent('binova:refresh-summary'))
       await load()
     } catch (e) {
-      setError(e?.response?.data?.message || 'Delete failed')
+      const errorData = e?.response?.data
+      const errorMsg = errorData?.message || 'Delete failed'
+      const hasHistory =
+        errorData?.code === 'HAS_COLLECTION_HISTORY' ||
+        errorMsg.toLowerCase().includes('collection history') ||
+        errorMsg.toLowerCase().includes('violates restrict')
+
+      if (hasHistory) {
+        setSafeDeleteBin(targetBin)
+        setSafeDeleteMessage(
+          `This bin cannot be permanently deleted because it has collection history. Set the bin to INACTIVE instead to preserve historical records.`
+        )
+        setSafeDeleteModalOpen(true)
+      } else {
+        setError(errorMsg)
+      }
+    }
+  }
+
+  const handleSafeDeactivate = async () => {
+    if (!safeDeleteBin) return
+    setDeactivating(true)
+    try {
+      await patchBinStatus(safeDeleteBin.id, 'INACTIVE')
+      setSuccess(`Bin "${safeDeleteBin.binCode || safeDeleteBin.code}" has been set to INACTIVE. Historical records preserved.`)
+      setSafeDeleteModalOpen(false)
+      setSafeDeleteBin(null)
+      if (selectedBin?.id === safeDeleteBin.id) {
+        setSelectedBin((prev) => (prev ? { ...prev, status: 'INACTIVE' } : null))
+      }
+      window.dispatchEvent(new CustomEvent('binova:refresh-summary'))
+      await load()
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Unable to update bin status to INACTIVE.')
+    } finally {
+      setDeactivating(false)
     }
   }
 
@@ -419,6 +538,14 @@ export default function Bins(){
                               </button>
                               <button
                                 type="button"
+                                className="table-action edit"
+                                onClick={(e) => openEditModal(bin, e)}
+                                title="Edit bin"
+                              >
+                                <Edit2 size={14} /> Edit
+                              </button>
+                              <button
+                                type="button"
                                 className="table-action danger"
                                 onClick={(e) => handleDelete(bin.id, bin.binCode || bin.code, e)}
                                 title="Delete bin"
@@ -560,6 +687,201 @@ export default function Bins(){
         </div>
       )}
 
+      {/* EDIT BIN MODAL */}
+      {editModalOpen && binToEdit && (
+        <div className="modal-backdrop" onClick={() => setEditModalOpen(false)}>
+          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Modify Configuration</p>
+                <h3>Edit Bin: {binToEdit.binCode || binToEdit.code}</h3>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setEditModalOpen(false)}
+                aria-label="Close modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit}>
+              <div className="form-grid">
+                <div className="field-group">
+                  <label htmlFor="edit-bin-code">Bin Code *</label>
+                  <input
+                    id="edit-bin-code"
+                    name="binCode"
+                    value={editForm.binCode}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, binCode: e.target.value }))}
+                    placeholder="e.g. BIN-001"
+                    required
+                  />
+                </div>
+                <div className="field-group">
+                  <label htmlFor="edit-bin-capacity">Capacity (m³) *</label>
+                  <input
+                    id="edit-bin-capacity"
+                    name="capacity"
+                    type="number"
+                    min="0.1"
+                    step="0.5"
+                    value={editForm.capacity}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, capacity: e.target.value }))}
+                    placeholder="e.g. 50"
+                    required
+                  />
+                </div>
+                <div className="field-group">
+                  <label htmlFor="edit-bin-latitude">Latitude *</label>
+                  <input
+                    id="edit-bin-latitude"
+                    name="latitude"
+                    type="number"
+                    step="0.000001"
+                    value={editForm.latitude}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, latitude: e.target.value }))}
+                    placeholder="e.g. 3.8480"
+                    required
+                  />
+                </div>
+                <div className="field-group">
+                  <label htmlFor="edit-bin-longitude">Longitude *</label>
+                  <input
+                    id="edit-bin-longitude"
+                    name="longitude"
+                    type="number"
+                    step="0.000001"
+                    value={editForm.longitude}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, longitude: e.target.value }))}
+                    placeholder="e.g. 11.5021"
+                    required
+                  />
+                </div>
+                <div className="field-group field-span-2">
+                  <label htmlFor="edit-bin-address">Physical Address / Location</label>
+                  <input
+                    id="edit-bin-address"
+                    name="address"
+                    value={editForm.address}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, address: e.target.value }))}
+                    placeholder="e.g. Central Market, Yaoundé"
+                  />
+                </div>
+                <div className="field-group">
+                  <label htmlFor="edit-bin-currentFillLevel">Current Fill Level (%)</label>
+                  <input
+                    id="edit-bin-currentFillLevel"
+                    name="currentFillLevel"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={editForm.currentFillLevel}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, currentFillLevel: e.target.value }))}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="field-group">
+                  <label htmlFor="edit-bin-status">Status</label>
+                  <select
+                    id="edit-bin-status"
+                    name="status"
+                    value={editForm.status}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, status: e.target.value }))}
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="INACTIVE">INACTIVE</option>
+                    <option value="DAMAGED">DAMAGED</option>
+                    <option value="REMOVED">REMOVED</option>
+                  </select>
+                </div>
+              </div>
+
+              {editFormError && <div className="error-box">{editFormError}</div>}
+
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setEditModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={editing}>
+                  {editing ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* SAFE DELETION ALTERNATIVE MODAL */}
+      {safeDeleteModalOpen && safeDeleteBin && (
+        <div className="modal-backdrop" onClick={() => setSafeDeleteModalOpen(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="stat-icon-wrap" style={{ background: '#fef3c7', color: '#d97706' }}>
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <p className="eyebrow" style={{ color: '#d97706' }}>Protected Record</p>
+                  <h3>Cannot Delete Permanently</h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setSafeDeleteModalOpen(false)}
+                aria-label="Close modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="details-card-body">
+              <div className="alert-banner warning" style={{ marginBottom: 16 }}>
+                <AlertTriangle size={20} style={{ flexShrink: 0 }} />
+                <div>
+                  <strong>Historical Collection Data Protected</strong>
+                  <p style={{ marginTop: 4 }}>
+                    {safeDeleteMessage ||
+                      'This bin cannot be permanently deleted because it has collection history. Set the bin to INACTIVE instead to preserve historical records.'}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ background: '#f8fafc', padding: 14, borderRadius: 8, fontSize: '0.85rem', color: '#475569', border: '1px solid #e2e8f0', marginBottom: 16 }}>
+                <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: 4 }}>
+                  Bin: {safeDeleteBin.binCode || safeDeleteBin.code} (ID #{safeDeleteBin.id})
+                </div>
+                <div>
+                  Setting this bin to <strong>INACTIVE</strong> will safely remove it from active collection planning while keeping all past collection logs, task audits, and statistics intact.
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSafeDeleteModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSafeDeactivate}
+                  disabled={deactivating}
+                  style={{ background: '#d97706', borderColor: '#d97706' }}
+                >
+                  {deactivating ? 'Deactivating...' : 'Set to INACTIVE Instead'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* BIN DETAILS MODAL */}
       {detailsModalOpen && selectedBin && (
         <div className="modal-backdrop" onClick={() => setDetailsModalOpen(false)}>
@@ -633,10 +955,26 @@ export default function Bins(){
                 </div>
               </div>
 
-              <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setDetailsModalOpen(false)}>
-                  Close
-                </button>
+              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setDetailsModalOpen(false)
+                      openEditModal(selectedBin)
+                    }}
+                  >
+                    <Edit2 size={15} /> Edit Bin
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setDetailsModalOpen(false)}
+                  >
+                    Close
+                  </button>
+                </div>
                 <button
                   type="button"
                   className="btn btn-primary"

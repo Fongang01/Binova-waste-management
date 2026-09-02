@@ -7,6 +7,7 @@ import BinDetails from './pages/BinDetails'
 import Drivers from './pages/Drivers'
 import Trucks from './pages/Trucks'
 import Collections from './pages/Collections'
+import AiPlanning from './pages/AiPlanning'
 import MapPage from './pages/MapPage'
 import Settings from './pages/Settings'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -24,6 +25,8 @@ export default function App(){
         <Route path="/drivers" element={<Drivers/>} />
         <Route path="/trucks" element={<Trucks/>} />
         <Route path="/collections" element={<Collections/>} />
+        <Route path="/ai-planning" element={<AiPlanning/>} />
+        <Route path="/planning" element={<Navigate to="/ai-planning" replace/>} />
         <Route path="/map" element={<MapPage/>} />
         <Route path="/settings" element={<Settings/>} />
       </Route>

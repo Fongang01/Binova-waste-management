@@ -14,9 +14,11 @@ class DriverApiRemoteDataSource implements DriverRemoteDataSource {
       final resp = await _client.dio.get('/api/driver/tasks');
       final data = resp.data;
       if (data == null || data['success'] != true) return [];
-      final items =
-          (data['data'] as List<dynamic>).cast<Map<String, dynamic>>();
-      return items.map((e) => TaskModel.fromApi(e)).toList();
+      final dynamic rawList = data['data'];
+      if (rawList is! List) return [];
+      return rawList
+          .map((e) => TaskModel.fromApi(Map<String, dynamic>.from(e as Map)))
+          .toList();
     } on DioException catch (e) {
       final msg = e.response?.data is Map ? e.response?.data['message'] : null;
       throw Exception(msg ?? e.message ?? 'Failed to get tasks');
@@ -34,6 +36,19 @@ class DriverApiRemoteDataSource implements DriverRemoteDataSource {
     } on DioException catch (e) {
       final msg = e.response?.data is Map ? e.response?.data['message'] : null;
       throw Exception(msg ?? e.message ?? 'Failed to update task status');
+    }
+  }
+
+  @override
+  Future<void> completeStop(String taskId, int stopId) async {
+    try {
+      await _client.dio.patch(
+        '/api/driver/tasks/$taskId/complete-stop',
+        data: {'stopId': stopId},
+      );
+    } on DioException catch (e) {
+      final msg = e.response?.data is Map ? e.response?.data['message'] : null;
+      throw Exception(msg ?? e.message ?? 'Failed to complete stop');
     }
   }
 

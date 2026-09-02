@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -64,6 +65,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
   // Selected item for bottom sheet details
   BinMapItem? _selectedBin;
   TaskEntity? _associatedTask;
+  RouteStopEntity? _selectedRouteStop;
 
   // Driver GPS Location
   Position? _currentPosition;
@@ -263,9 +265,10 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
     _mapController.move(_yaoundeCenter, 13.0);
   }
 
-  /// Fit map bounds to encompass all bins and driver position
+  /// Fit map bounds to encompass all route stops, bins, and driver position
   void _fitMapBounds() {
     final driverNotifier = context.read<DriverNotifier>();
+    final aiTask = driverNotifier.activeAiTask;
     final activeTasks = driverNotifier.tasks
         .where((t) => t.status != TaskStatus.completed && t.latitude != 0 && t.longitude != 0)
         .toList();
@@ -276,12 +279,19 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
       points.add(LatLng(_currentPosition!.latitude, _currentPosition!.longitude));
     }
 
-    for (final b in _bins) {
-      points.add(LatLng(b.latitude, b.longitude));
-    }
-
-    for (final t in activeTasks) {
-      points.add(LatLng(t.latitude, t.longitude));
+    if (aiTask != null && aiTask.routeStops.isNotEmpty) {
+      for (final s in aiTask.routeStops) {
+        if (s.latitude != 0 && s.longitude != 0) {
+          points.add(LatLng(s.latitude, s.longitude));
+        }
+      }
+    } else {
+      for (final b in _bins) {
+        points.add(LatLng(b.latitude, b.longitude));
+      }
+      for (final t in activeTasks) {
+        points.add(LatLng(t.latitude, t.longitude));
+      }
     }
 
     if (points.isEmpty) {
@@ -305,7 +315,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
   }
 
   /// Build markers for all real bins, active tasks, and the driver's real-time position
-  List<Marker> _buildMarkers(List<TaskEntity> activeTasks) {
+  List<Marker> _buildMarkers(List<TaskEntity> activeTasks, TaskEntity? aiTask) {
     final List<Marker> markers = [];
 
     // 1. REAL DRIVER GPS POSITION MARKER
@@ -367,8 +377,85 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
       );
     }
 
-    // 2. REAL BINS FROM BACKEND
+    final Set<int> aiRouteBinIds = {};
+
+    // 2. AI ROUTE ORDERED STOPS
+    if (aiTask != null && aiTask.routeStops.isNotEmpty) {
+      for (final stop in aiTask.routeStops) {
+        if (stop.latitude == 0 || stop.longitude == 0) continue;
+        aiRouteBinIds.add(stop.id);
+        aiRouteBinIds.add(stop.binId);
+
+        final isCritical = stop.fillLevel >= 80 || stop.priority == TaskPriority.urgent;
+        final isModerate = (stop.fillLevel >= 50 && stop.fillLevel < 80) || stop.priority == TaskPriority.high;
+
+        Color pinColor = const Color(0xFF16A34A); // Normal Green
+        if (stop.isCompleted) {
+          pinColor = Colors.grey.shade400;
+        } else if (isCritical) {
+          pinColor = const Color(0xFFEF4444); // Critical Red
+        } else if (isModerate) {
+          pinColor = const Color(0xFFF59E0B); // Moderate Orange
+        }
+
+        final isNext = !stop.isCompleted && aiTask.currentStop?.id == stop.id;
+
+        markers.add(
+          Marker(
+            point: LatLng(stop.latitude, stop.longitude),
+            width: 46,
+            height: 46,
+            alignment: Alignment.topCenter,
+            child: GestureDetector(
+              onTap: () {
+                final syntheticBin = BinMapItem(
+                  id: stop.id,
+                  binCode: stop.binCode,
+                  latitude: stop.latitude,
+                  longitude: stop.longitude,
+                  address: stop.address,
+                  capacity: stop.capacity,
+                  currentFillLevel: stop.fillLevel,
+                  status: 'ACTIVE',
+                );
+                setState(() {
+                  _selectedRouteStop = stop;
+                  _selectedBin = syntheticBin;
+                  _associatedTask = aiTask;
+                });
+                _mapController.move(LatLng(stop.latitude, stop.longitude), 15.5);
+              },
+              child: isNext
+                  ? AnimatedBuilder(
+                      animation: _pulseController,
+                      builder: (context, child) {
+                        return Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Container(
+                              width: 38 + (_pulseController.value * 8),
+                              height: 38 + (_pulseController.value * 8),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: pinColor.withValues(alpha: 0.4 * (1 - _pulseController.value)),
+                              ),
+                            ),
+                            _buildBinPinWidget(pinColor, stop.fillLevel, stopOrder: stop.stopOrder, isCompleted: stop.isCompleted),
+                          ],
+                        );
+                      },
+                    )
+                  : _buildBinPinWidget(pinColor, stop.fillLevel, stopOrder: stop.stopOrder, isCompleted: stop.isCompleted),
+            ),
+          ),
+        );
+      }
+    }
+
+    // 3. OTHER REAL MUNICIPAL BINS FROM BACKEND
     for (final bin in _bins) {
+      if (aiRouteBinIds.contains(bin.id)) continue;
+
       final task = activeTasks.cast<TaskEntity?>().firstWhere(
             (t) => t?.binId == bin.id.toString() || t?.binId == bin.binCode,
             orElse: () => null,
@@ -377,11 +464,11 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
       final isCritical = bin.currentFillLevel >= 80;
       final isModerate = bin.currentFillLevel >= 50 && bin.currentFillLevel < 80;
 
-      Color pinColor = const Color(0xFF16A34A); // Normal Green
+      Color pinColor = const Color(0xFF16A34A);
       if (isCritical) {
-        pinColor = const Color(0xFFEF4444); // Critical Red
+        pinColor = const Color(0xFFEF4444);
       } else if (isModerate) {
-        pinColor = const Color(0xFFF59E0B); // Moderate Orange
+        pinColor = const Color(0xFFF59E0B);
       }
 
       markers.add(
@@ -393,6 +480,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
           child: GestureDetector(
             onTap: () {
               setState(() {
+                _selectedRouteStop = null;
                 _selectedBin = bin;
                 _associatedTask = task;
               });
@@ -413,19 +501,19 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                               color: pinColor.withValues(alpha: 0.3 * (1 - _pulseController.value)),
                             ),
                           ),
-                          _buildBinPinWidget(pinColor, bin.currentFillLevel),
+                          _buildBinPinWidget(pinColor, bin.currentFillLevel, stopOrder: task?.stopOrder),
                         ],
                       );
                     },
                   )
-                : _buildBinPinWidget(pinColor, bin.currentFillLevel),
+                : _buildBinPinWidget(pinColor, bin.currentFillLevel, stopOrder: task?.stopOrder),
           ),
         ),
       );
     }
 
-    // 3. Fallback: If bins list is empty but tasks exist, render task markers
-    if (_bins.isEmpty) {
+    // 4. Fallback: If bins list is empty and no AI task, render standard task markers
+    if (_bins.isEmpty && aiTask == null) {
       for (final task in activeTasks) {
         if (task.latitude == 0 || task.longitude == 0) continue;
         final isCritical = task.fillLevel >= 80;
@@ -457,12 +545,13 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                   status: 'ACTIVE',
                 );
                 setState(() {
+                  _selectedRouteStop = null;
                   _selectedBin = syntheticBin;
                   _associatedTask = task;
                 });
                 _mapController.move(LatLng(task.latitude, task.longitude), 15.5);
               },
-              child: _buildBinPinWidget(pinColor, task.fillLevel),
+              child: _buildBinPinWidget(pinColor, task.fillLevel, stopOrder: task.stopOrder),
             ),
           ),
         );
@@ -472,12 +561,12 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
     return markers;
   }
 
-  Widget _buildBinPinWidget(Color color, int fillLevel) {
+  Widget _buildBinPinWidget(Color color, int fillLevel, {int? stopOrder, bool isCompleted = false}) {
     return Container(
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: color,
+        color: isCompleted ? Colors.grey.shade400 : color,
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white, width: 2.2),
         boxShadow: [
@@ -488,32 +577,124 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
           ),
         ],
       ),
-      child: const Center(
-        child: Icon(
-          Icons.delete_outline_rounded,
-          color: Colors.white,
-          size: 16,
-        ),
+      child: Center(
+        child: isCompleted
+            ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
+            : (stopOrder != null
+                ? Text(
+                    '$stopOrder',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  )
+                : const Icon(
+                    Icons.delete_outline_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  )),
       ),
     );
   }
 
-  /// Polyline foundation for Future AI Route visualization on real roads
-  List<Polyline> _buildPolylines(List<TaskEntity> activeTasks) {
+  /// Polyline rendering for real road-following AI collection routes
+  List<Polyline> _buildPolylines(List<TaskEntity> activeTasks, TaskEntity? aiTask) {
+    final List<LatLng> polylinePoints = [];
+
+    // 1. Check AI Task stored GeoJSON road route geometry from Mapbox Directions
+    if (aiTask != null && aiTask.recommendedRoute != null && aiTask.recommendedRoute!.isNotEmpty) {
+      try {
+        final dynamic parsed = jsonDecode(aiTask.recommendedRoute!);
+        if (parsed is Map && parsed['geometry'] is Map) {
+          final geom = parsed['geometry'] as Map;
+          final coords = geom['coordinates'];
+          if (coords is List && coords.isNotEmpty) {
+            for (final c in coords) {
+              if (c is List && c.length >= 2) {
+                final lng = (c[0] as num).toDouble();
+                final lat = (c[1] as num).toDouble();
+                if (lat != 0 && lng != 0) {
+                  polylinePoints.add(LatLng(lat, lng));
+                }
+              }
+            }
+            if (polylinePoints.length >= 2) {
+              final List<Polyline> lines = [
+                Polyline(
+                  points: polylinePoints,
+                  color: const Color(0xFF10B981),
+                  strokeWidth: 5.0,
+                ),
+              ];
+
+              // If driver location available and active stop available, draw connector
+              if (_currentPosition != null && aiTask.currentStop != null) {
+                final nextStop = aiTask.currentStop!;
+                if (nextStop.latitude != 0 && nextStop.longitude != 0) {
+                  lines.add(
+                    Polyline(
+                      points: [
+                        LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                        LatLng(nextStop.latitude, nextStop.longitude),
+                      ],
+                      color: const Color(0xFF2563EB),
+                      strokeWidth: 3.5,
+                      pattern: StrokePattern.dashed(segments: const [8, 6]),
+                    ),
+                  );
+                }
+              }
+
+              return lines;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. Check any active tasks with recommendedRoute
+    for (final task in activeTasks) {
+      if (task.recommendedRoute != null && task.recommendedRoute!.isNotEmpty) {
+        try {
+          final dynamic parsed = jsonDecode(task.recommendedRoute!);
+          if (parsed is Map && parsed['geometry'] is Map) {
+            final geom = parsed['geometry'] as Map;
+            final coords = geom['coordinates'];
+            if (coords is List && coords.isNotEmpty) {
+              for (final c in coords) {
+                if (c is List && c.length >= 2) {
+                  final lng = (c[0] as num).toDouble();
+                  final lat = (c[1] as num).toDouble();
+                  if (lat != 0 && lng != 0) {
+                    polylinePoints.add(LatLng(lat, lng));
+                  }
+                }
+              }
+              if (polylinePoints.length >= 2) {
+                return [
+                  Polyline(
+                    points: polylinePoints,
+                    color: const Color(0xFF10B981),
+                    strokeWidth: 5.0,
+                  ),
+                ];
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    // 3. Fallback: Connect driver GPS position and task waypoints
     final validTasks = activeTasks
         .where((t) => t.latitude != 0 && t.longitude != 0)
         .toList();
 
-    if (validTasks.isEmpty) return [];
-
-    final List<LatLng> polylinePoints = [];
-
-    // Start from driver current GPS position if available
     if (_currentPosition != null) {
       polylinePoints.add(LatLng(_currentPosition!.latitude, _currentPosition!.longitude));
     }
 
-    // Connect collection route waypoints
     for (final task in validTasks) {
       polylinePoints.add(LatLng(task.latitude, task.longitude));
     }
@@ -533,12 +714,13 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
   @override
   Widget build(BuildContext context) {
     final driverNotifier = context.watch<DriverNotifier>();
+    final aiTask = driverNotifier.activeAiTask;
     final activeTasks = driverNotifier.tasks
         .where((t) => t.status != TaskStatus.completed)
         .toList();
 
-    final markers = _buildMarkers(activeTasks);
-    final polylines = _buildPolylines(activeTasks);
+    final markers = _buildMarkers(activeTasks, aiTask);
+    final polylines = _buildPolylines(activeTasks, aiTask);
 
     return Scaffold(
       body: Stack(
@@ -558,6 +740,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                   setState(() {
                     _selectedBin = null;
                     _associatedTask = null;
+                    _selectedRouteStop = null;
                   });
                 }
               },
@@ -628,14 +811,16 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                             Container(
                               width: 9,
                               height: 9,
-                              decoration: const BoxDecoration(
-                                color: AppTheme.primaryEmerald,
+                              decoration: BoxDecoration(
+                                color: _backendError == null ? AppTheme.primaryEmerald : Colors.red,
                                 shape: BoxShape.circle,
                               ),
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              '${_bins.isNotEmpty ? _bins.length : activeTasks.length} Bins Monitored',
+                              _backendError == null
+                                  ? '${_bins.isNotEmpty ? _bins.length : activeTasks.length} Bins Monitored'
+                                  : 'Offline Mode (Local Cache)',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 13,
@@ -660,41 +845,16 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                               ),
                             ),
                           ),
-                        if (_backendError != null && _bins.isEmpty)
-                          InkWell(
-                            onTap: _showServerDiagnosticsSheet,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.wifi_off_rounded, size: 12, color: Colors.orange.shade800),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Offline',
-                                    style: TextStyle(
-                                      color: Colors.orange.shade800,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(width: 10),
+                // Refresh Button
                 Material(
-                  color: Colors.white,
+                  color: Colors.white.withValues(alpha: 0.95),
                   borderRadius: BorderRadius.circular(14),
-                  elevation: 4,
+                  elevation: 3,
                   shadowColor: Colors.black26,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(14),
@@ -714,6 +874,59 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
               ],
             ),
           ),
+
+          // 2.5 AI ROUTE HUD (IF AI ROUTE ACTIVE)
+          if (aiTask != null || activeTasks.isNotEmpty)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 64,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black38, blurRadius: 10, offset: Offset(0, 4)),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.auto_awesome_rounded, color: Color(0xFF10B981), size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        aiTask != null
+                            ? 'AI Route: Stop #${aiTask.currentStopNumber} of ${aiTask.totalStops} • ${aiTask.pendingStopsCount} ${aiTask.pendingStopsCount == 1 ? "Stop" : "Stops"} Pending'
+                            : 'Collection Tasks: ${activeTasks.length} ${activeTasks.length == 1 ? "Stop" : "Stops"} Pending',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (aiTask?.distanceKm != null || activeTasks.any((t) => t.distanceKm != null))
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${(aiTask?.distanceKm ?? activeTasks.firstWhere((t) => t.distanceKm != null).distanceKm)!.toStringAsFixed(1)} km',
+                          style: const TextStyle(
+                            color: Color(0xFF10B981),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
 
           // 3. FLOATING MAP LEGEND (BOTTOM-LEFT)
           if (_selectedBin == null)
@@ -805,7 +1018,12 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
               bottom: 20,
               left: 16,
               right: 16,
-              child: _buildBinDetailsCard(_selectedBin!, _associatedTask, driverNotifier),
+              child: _buildBinDetailsCard(
+                _selectedBin!,
+                _associatedTask,
+                _selectedRouteStop,
+                driverNotifier,
+              ),
             ),
         ],
       ),
@@ -816,11 +1034,14 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
   Widget _buildBinDetailsCard(
     BinMapItem bin,
     TaskEntity? task,
+    RouteStopEntity? routeStop,
     DriverNotifier notifier,
   ) {
-    final isCritical = bin.currentFillLevel >= 80;
-    final isWarning = bin.currentFillLevel >= 50 && bin.currentFillLevel < 80;
-    final fillPercent = (bin.currentFillLevel / 100.0).clamp(0.0, 1.0);
+    final isAi = task?.isAiOptimized == true && routeStop != null;
+    final fillLevel = isAi ? routeStop.fillLevel : bin.currentFillLevel;
+    final isCritical = fillLevel >= 80;
+    final isWarning = fillLevel >= 50 && fillLevel < 80;
+    final fillPercent = (fillLevel / 100.0).clamp(0.0, 1.0);
 
     Color fillBarColor = const Color(0xFF16A34A);
     if (isCritical) {
@@ -839,7 +1060,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // HEADER: Bin Code & Close
+            // HEADER: Stop Number / Bin Code & Close
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -854,7 +1075,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
-                        Icons.delete_sweep_rounded,
+                        isAi ? Icons.alt_route_rounded : Icons.delete_sweep_rounded,
                         color: isCritical
                             ? Colors.red
                             : (isWarning ? Colors.orange.shade800 : AppTheme.primaryEmerald),
@@ -866,27 +1087,46 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          bin.binCode,
+                          isAi ? 'Stop #${routeStop.stopOrder}: ${routeStop.binCode}' : bin.binCode,
                           style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
                         ),
                         Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                bin.status,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: bin.status == 'ACTIVE' ? Colors.green.shade700 : Colors.red.shade700,
+                            if (isAi)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryEmerald.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  routeStop.isCompleted
+                                      ? 'COLLECTED'
+                                      : 'STOP ${routeStop.stopOrder}/${task!.totalStops}',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.primaryEmerald,
+                                  ),
+                                ),
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  bin.status,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: bin.status == 'ACTIVE' ? Colors.green.shade700 : Colors.red.shade700,
+                                  ),
                                 ),
                               ),
-                            ),
-                            if (task != null) ...[
+                            if (task != null && !isAi) ...[
                               const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -915,6 +1155,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                   onPressed: () => setState(() {
                     _selectedBin = null;
                     _associatedTask = null;
+                    _selectedRouteStop = null;
                   }),
                 ),
               ],
@@ -929,8 +1170,8 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    bin.address.isNotEmpty
-                        ? bin.address
+                    (isAi ? routeStop.address : bin.address).isNotEmpty
+                        ? (isAi ? routeStop.address : bin.address)
                         : '${bin.latitude.toStringAsFixed(5)}°, ${bin.longitude.toStringAsFixed(5)}° (Yaoundé)',
                     style: const TextStyle(color: AppTheme.darkText, fontSize: 13, height: 1.3),
                     maxLines: 2,
@@ -947,7 +1188,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
               children: [
                 const Text('Fill Level:', style: TextStyle(fontSize: 12, color: AppTheme.greyText, fontWeight: FontWeight.w600)),
                 Text(
-                  '${bin.currentFillLevel}% ${isCritical ? "(CRITICAL)" : (isWarning ? "(HIGH)" : "Capacity")}',
+                  '$fillLevel% ${isCritical ? "(CRITICAL)" : (isWarning ? "(HIGH)" : "Capacity")}',
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
@@ -969,8 +1210,83 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
 
             const SizedBox(height: 16),
 
-            // ACTION BUTTON (IF TASK IS ASSIGNED TO DRIVER)
-            if (task != null)
+            // ACTION BUTTON (AI STOP OR REGULAR TASK)
+            if (isAi)
+              SizedBox(
+                width: double.infinity,
+                child: routeStop.isCompleted
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.check_circle_rounded, color: Colors.green, size: 18),
+                            SizedBox(width: 8),
+                            Text(
+                              'Stop Already Collected',
+                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryEmerald,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          elevation: 0,
+                        ),
+                        icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 20),
+                        label: Text(
+                          'Complete Stop #${routeStop.stopOrder} Collection',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
+                        ),
+                        onPressed: () async {
+                          await notifier.completeStop(task!.id, routeStop.id);
+                          await _fetchRealBins();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Stop #${routeStop.stopOrder} (${routeStop.binCode}) collected!'),
+                                backgroundColor: AppTheme.primaryEmerald,
+                              ),
+                            );
+
+                            final updatedTask = notifier.activeAiTask;
+                            if (updatedTask != null && updatedTask.currentStop != null) {
+                              final nextStop = updatedTask.currentStop!;
+                              setState(() {
+                                _selectedRouteStop = nextStop;
+                                _selectedBin = BinMapItem(
+                                  id: nextStop.id,
+                                  binCode: nextStop.binCode,
+                                  latitude: nextStop.latitude,
+                                  longitude: nextStop.longitude,
+                                  address: nextStop.address,
+                                  capacity: nextStop.capacity,
+                                  currentFillLevel: nextStop.fillLevel,
+                                  status: 'ACTIVE',
+                                );
+                                _associatedTask = updatedTask;
+                              });
+                              _mapController.move(LatLng(nextStop.latitude, nextStop.longitude), 15.5);
+                            } else {
+                              setState(() {
+                                _selectedBin = null;
+                                _associatedTask = null;
+                                _selectedRouteStop = null;
+                              });
+                            }
+                          }
+                        },
+                      ),
+              )
+            else if (task != null)
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -1002,6 +1318,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                       setState(() {
                         _selectedBin = null;
                         _associatedTask = null;
+                        _selectedRouteStop = null;
                       });
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -1021,6 +1338,11 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                           priority: task.priority,
                           status: TaskStatus.inProgress,
                           assignedTime: task.assignedTime,
+                          recommendedRoute: task.recommendedRoute,
+                          distanceKm: task.distanceKm,
+                          estimatedDuration: task.estimatedDuration,
+                          stopOrder: task.stopOrder,
+                          routeStops: task.routeStops,
                         );
                       });
                       if (mounted) {

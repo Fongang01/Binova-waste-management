@@ -1,0 +1,469 @@
+/* AiPlanning.css — BINOVA AI Route Optimization & Collection Planning */
+
+.ai-planning-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+/* Header & AI Banner */
+.ai-header-card {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #ffffff;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  box-shadow: 0 8px 20px -4px rgba(15, 23, 42, 0.2);
+}
+
+.ai-header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ai-sparkle-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.3);
+}
+
+.ai-header-title h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 2px 0;
+  color: #f8fafc;
+}
+
+.ai-header-title p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #94a3b8;
+}
+
+.ai-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* KPI Summary Ribbon */
+.ai-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.ai-metric-box {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.ai-metric-box.critical {
+  border-left: 4px solid #ef4444;
+}
+
+.ai-metric-box.route {
+  border-left: 4px solid #10b981;
+}
+
+.ai-metric-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ai-metric-val {
+  font-size: 1.28rem;
+  font-weight: 700;
+  color: var(--dark);
+  margin-top: 2px;
+}
+
+.ai-metric-sub {
+  font-size: 0.7rem;
+  color: #64748b;
+  margin-top: 1px;
+}
+
+/* Main Split View: Map + Planner Controls */
+.ai-planning-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 1100px) {
+  .ai-planning-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Map Card */
+.ai-map-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 520px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  position: relative;
+}
+
+.ai-map-header {
+  padding: 10px 14px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ai-map-viewport {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* Custom Marker Pins */
+.ai-stop-pin {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.ai-stop-pin:hover {
+  transform: scale(1.18);
+  z-index: 100;
+}
+
+.ai-stop-pin.critical {
+  background: #ef4444;
+}
+
+.ai-stop-pin.high {
+  background: #f97316;
+}
+
+.ai-stop-pin.normal {
+  background: #10b981;
+}
+
+.ai-stop-pin.start {
+  background: #2563eb;
+  width: 32px;
+  height: 32px;
+}
+
+/* Right Control Panel */
+.ai-control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ai-card-section {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.ai-card-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.ai-card-section-title h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--dark);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Dispatch Recommendation Cards */
+.ai-resource-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-resource-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ai-resource-name {
+  font-weight: 600;
+  color: var(--dark);
+  font-size: 0.9rem;
+}
+
+.ai-score-badge {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.ai-resource-reason {
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.ai-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.ai-select-row label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.ai-select-row select {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  background: #ffffff;
+}
+
+/* Bin Sequence List */
+.ai-bins-list {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ai-bin-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  transition: all 0.15s ease;
+}
+
+.ai-bin-item.selected {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.ai-bin-item.critical {
+  border-left: 3px solid #ef4444;
+}
+
+.ai-bin-checkbox {
+  cursor: pointer;
+}
+
+.ai-bin-index {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ai-bin-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-bin-header-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-bin-code {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--dark);
+}
+
+.ai-priority-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.ai-priority-tag.critical {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.ai-priority-tag.high {
+  background: #ffedd5;
+  color: #ea580c;
+}
+
+.ai-priority-tag.normal {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.ai-priority-tag.low {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.ai-bin-address {
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.ai-bin-reason {
+  font-size: 0.7rem;
+  color: #059669;
+  margin-top: 2px;
+  font-style: italic;
+}
+
+.ai-bin-fill-cell {
+  width: 85px;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.ai-bin-fill-pct {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--dark);
+}
+
+/* Approval Footer Bar */
+.ai-approval-bar {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.ai-approval-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ai-approval-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--dark);
+}
+
+.ai-approval-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.ai-approval-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-approve-dispatch {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 11px 22px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+  transition: all 0.2s ease;
+}
+
+.btn-approve-dispatch:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.45);
+}
+
+.btn-approve-dispatch:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

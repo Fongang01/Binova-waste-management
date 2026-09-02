@@ -35,9 +35,41 @@ export default function Topbar({ title }){
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [alerts, setAlerts] = useState([])
   const [loadingAlerts, setLoadingAlerts] = useState(false)
+  const [notifFilter, setNotifFilter] = useState('ALL') // 'ALL' or 'UNREAD'
+  const [readNotifIds, setReadNotifIds] = useState(() => {
+    try {
+      const stored = localStorage.getItem('binova_read_notif_ids')
+      return stored ? JSON.parse(stored) : []
+    } catch (_) {
+      return []
+    }
+  })
 
   const notifRef = useRef(null)
   const userMenuRef = useRef(null)
+
+  const saveReadIds = (ids) => {
+    setReadNotifIds(ids)
+    try {
+      localStorage.setItem('binova_read_notif_ids', JSON.stringify(ids))
+    } catch (_) {}
+  }
+
+  const markAsRead = (id) => {
+    if (!readNotifIds.includes(id)) {
+      const updated = [...readNotifIds, id]
+      saveReadIds(updated)
+    }
+  }
+
+  const markAllAsRead = () => {
+    const allIds = alerts.map((a) => a.id)
+    saveReadIds(allIds)
+  }
+
+  const clearReadHistory = () => {
+    saveReadIds([])
+  }
 
   const syncUser = () => {
     setUser(JSON.parse(sessionStorage.getItem('binova_user') || 'null'))
@@ -160,10 +192,15 @@ export default function Topbar({ title }){
   const displayName = (user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`).trim() || 'Administrator'
   const initials = displayName.split(' ').filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase() || 'AD'
 
-  const handleAlertClick = (link) => {
+  const handleAlertClick = (alert) => {
+    markAsRead(alert.id)
     setNotifOpen(false)
-    nav(link)
+    nav(alert.link)
   }
+
+  const unreadAlerts = alerts.filter((a) => !readNotifIds.includes(a.id))
+  const displayedAlerts = notifFilter === 'UNREAD' ? unreadAlerts : alerts
+  const unreadCount = unreadAlerts.length
 
   return (
     <header className="topbar">
@@ -183,42 +220,88 @@ export default function Topbar({ title }){
             title="System notifications & alerts"
           >
             <Bell size={18} />
-            {alerts.length > 0 && <span className="notification-badge-count">{alerts.length}</span>}
+            {unreadCount > 0 && <span className="notification-badge-count">{unreadCount}</span>}
           </button>
 
           {notifOpen && (
             <div className="dropdown-panel notif-dropdown">
               <div className="dropdown-header">
                 <div>
-                  <h4>Operational Alerts</h4>
-                  <p className="text-muted text-xs">Live status updates from field sensors and dispatch</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h4 style={{ margin: 0 }}>Operational Alerts</h4>
+                    {unreadCount > 0 && (
+                      <span className="badge-unread-count">{unreadCount} unread</span>
+                    )}
+                  </div>
+                  <p className="text-muted text-xs" style={{ marginTop: 2 }}>
+                    Live status updates from field sensors and dispatch
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  className="icon-button-subtle"
-                  onClick={() => setNotifOpen(false)}
-                  aria-label="Close notifications"
-                >
-                  <X size={15} />
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      className="btn-mark-read"
+                      onClick={markAllAsRead}
+                      title="Mark all notifications as read"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="icon-button-subtle"
+                    onClick={() => setNotifOpen(false)}
+                    aria-label="Close notifications"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
               </div>
 
+              {/* Filter Tabs */}
+              {alerts.length > 0 && (
+                <div className="notif-tabs">
+                  <button
+                    type="button"
+                    className={`notif-tab ${notifFilter === 'ALL' ? 'active' : ''}`}
+                    onClick={() => setNotifFilter('ALL')}
+                  >
+                    All ({alerts.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`notif-tab ${notifFilter === 'UNREAD' ? 'active' : ''}`}
+                    onClick={() => setNotifFilter('UNREAD')}
+                  >
+                    Unread ({unreadCount})
+                  </button>
+                </div>
+              )}
+
               <div className="dropdown-body">
-                {alerts.length === 0 ? (
+                {displayedAlerts.length === 0 ? (
                   <div className="dropdown-empty">
                     <CheckCircle2 size={32} className="text-success" />
-                    <p className="font-semibold text-dark">All Systems Operational</p>
-                    <span className="text-muted text-xs">No active alerts. Bins and vehicles operating normally.</span>
+                    <p className="font-semibold text-dark">
+                      {notifFilter === 'UNREAD' ? 'All Alerts Read' : 'All Systems Operational'}
+                    </p>
+                    <span className="text-muted text-xs">
+                      {notifFilter === 'UNREAD'
+                        ? 'You have viewed all operational alerts.'
+                        : 'No active alerts. Bins and vehicles operating normally.'}
+                    </span>
                   </div>
                 ) : (
                   <div className="notif-list">
-                    {alerts.map((alert) => {
+                    {displayedAlerts.map((alert) => {
                       const Icon = alert.icon
+                      const isRead = readNotifIds.includes(alert.id)
                       return (
                         <div
                           key={alert.id}
-                          className={`notif-item notif-${alert.tone}`}
-                          onClick={() => handleAlertClick(alert.link)}
+                          className={`notif-item notif-${alert.tone} ${isRead ? 'notif-read' : 'notif-unread'}`}
+                          onClick={() => handleAlertClick(alert)}
                           role="button"
                           tabIndex={0}
                         >
@@ -226,9 +309,15 @@ export default function Topbar({ title }){
                             <Icon size={16} />
                           </div>
                           <div className="notif-content">
-                            <div className="notif-title">{alert.title}</div>
+                            <div className="notif-title-row">
+                              <span className="notif-title">{alert.title}</span>
+                              {!isRead && <span className="unread-dot" title="Unread" />}
+                            </div>
                             <div className="notif-subtitle">{alert.subtitle}</div>
-                            <div className="notif-time">{alert.time}</div>
+                            <div className="notif-meta-row">
+                              <span className="notif-time">{alert.time}</span>
+                              {isRead && <span className="read-tag">Read</span>}
+                            </div>
                           </div>
                           <ArrowRight size={14} className="notif-arrow" />
                         </div>
@@ -239,14 +328,25 @@ export default function Topbar({ title }){
               </div>
 
               {alerts.length > 0 && (
-                <div className="dropdown-footer">
+                <div className="dropdown-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <button
                     type="button"
                     className="btn-text"
                     onClick={() => { setNotifOpen(false); nav('/bins?filter=critical') }}
                   >
-                    View All Critical Bins →
+                    View Critical Bins →
                   </button>
+                  {readNotifIds.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn-text-subtle"
+                      onClick={clearReadHistory}
+                      title="Reset read notifications state"
+                      style={{ fontSize: '0.75rem', color: '#94a3b8' }}
+                    >
+                      Reset Read State
+                    </button>
+                  )}
                 </div>
               )}
             </div>

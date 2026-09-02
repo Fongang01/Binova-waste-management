@@ -5,6 +5,7 @@ import '../../domain/entities/task_entity.dart';
 abstract class DriverRemoteDataSource {
   Future<List<TaskModel>> getAssignedTasks();
   Future<void> updateTaskStatus(String taskId, TaskStatus status);
+  Future<void> completeStop(String taskId, int stopId);
   Future<TruckModel?> getAssignedTruck();
   Stream<List<TaskModel>> get tasksStream;
 }
@@ -16,6 +17,9 @@ class DriverRemoteDataSourceImpl implements DriverRemoteDataSource {
   
   @override
   Future<void> updateTaskStatus(String taskId, TaskStatus status) async {}
+
+  @override
+  Future<void> completeStop(String taskId, int stopId) async {}
 
   @override
   Future<TruckModel?> getAssignedTruck() async => null;
@@ -33,6 +37,11 @@ class MockDriverRemoteDataSource implements DriverRemoteDataSource {
 
   @override
   Future<void> updateTaskStatus(String taskId, TaskStatus status) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  @override
+  Future<void> completeStop(String taskId, int stopId) async {
     await Future.delayed(const Duration(milliseconds: 500));
   }
 

@@ -52,12 +52,31 @@ class DriverNotifier extends ChangeNotifier {
     }
   }
 
+  TaskEntity? get activeAiTask {
+    try {
+      return _tasks.firstWhere(
+        (t) => t.isAiOptimized && t.status != TaskStatus.completed,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> updateStatus(String taskId, TaskStatus status) async {
     try {
       await updateTaskStatusUseCase(UpdateTaskStatusParams(taskId: taskId, status: status));
       await loadDashboardData();
     } catch (e) {
       debugPrint('Error updating task status: $e');
+    }
+  }
+
+  Future<void> completeStop(String taskId, int stopId) async {
+    try {
+      await updateTaskStatusUseCase.completeStop(taskId, stopId);
+      await loadDashboardData();
+    } catch (e) {
+      debugPrint('Error completing stop: $e');
     }
   }
 }

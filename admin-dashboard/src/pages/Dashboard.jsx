@@ -99,9 +99,19 @@ export default function Dashboard(){
               <h2>Welcome back, {adminName}</h2>
               <p className="welcome-subtext">Real-time overview of waste collection fleet, bins, and field operations.</p>
             </div>
-            <div className="welcome-metric">
-              <span className="metric-label">Network Status</span>
-              <strong className="status-live-tag"><span className="live-pulsing-dot" /> Live</strong>
+            <div className="welcome-metric" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div>
+                <span className="metric-label">Network Status</span>
+                <strong className="status-live-tag"><span className="live-pulsing-dot" /> Live</strong>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => nav('/ai-planning')}
+                style={{ padding: '8px 14px', fontSize: '0.85rem' }}
+              >
+                <Sparkles size={15} /> AI Route Planning
+              </button>
             </div>
           </section>
 
