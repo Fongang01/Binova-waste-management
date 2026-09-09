@@ -52,7 +52,30 @@ class DriverNotifier extends ChangeNotifier {
     }
   }
 
+  String? _selectedTaskId;
+  String? get selectedTaskId => _selectedTaskId;
+
+  void selectTask(String? taskId) {
+    _selectedTaskId = taskId;
+    notifyListeners();
+  }
+
+  TaskEntity? get selectedTask {
+    if (_selectedTaskId == null) return null;
+    try {
+      return _tasks.firstWhere((t) => t.id == _selectedTaskId);
+    } catch (_) {
+      return null;
+    }
+  }
+
   TaskEntity? get activeAiTask {
+    if (_selectedTaskId != null) {
+      final st = selectedTask;
+      if (st != null && st.isAiOptimized && st.status != TaskStatus.completed) {
+        return st;
+      }
+    }
     try {
       return _tasks.firstWhere(
         (t) => t.isAiOptimized && t.status != TaskStatus.completed,

@@ -52,6 +52,9 @@ class DriverRouteScreen extends StatelessWidget {
               child: SafeArea(
                 child: ElevatedButton.icon(
                   onPressed: () {
+                    if (aiTask != null) {
+                      driverNotifier.selectTask(aiTask.id);
+                    }
                     driverNotifier.setTabIndex(2); // Map Tab
                     if (Navigator.of(context).canPop()) {
                       Navigator.of(context).pop();

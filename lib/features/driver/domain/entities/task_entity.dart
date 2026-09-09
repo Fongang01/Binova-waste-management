@@ -80,9 +80,8 @@ class TaskEntity extends Equatable {
   });
 
   bool get isAiOptimized =>
-      recommendedRoute != null &&
-      recommendedRoute!.isNotEmpty &&
-      (routeStops.isNotEmpty || (distanceKm != null && distanceKm! > 0));
+      routeStops.isNotEmpty ||
+      (recommendedRoute != null && recommendedRoute!.trim().isNotEmpty);
 
   int get totalStops => routeStops.isNotEmpty ? routeStops.length : 1;
 

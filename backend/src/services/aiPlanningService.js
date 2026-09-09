@@ -663,6 +663,21 @@ export async function approveAndCreateTasks(approvalData, adminUser) {
     },
   });
 
+  // Auto-consolidate/resolve any existing active single tasks for these bins
+  await prisma.collectionTask.updateMany({
+    where: {
+      binId: { in: formattedStops.map((s) => s.id) },
+      id: { not: task.id },
+      status: { in: ["ASSIGNED", "IN_PROGRESS", "PENDING"] },
+      source: { not: "AI_RECOMMENDATION" },
+    },
+    data: {
+      status: "COMPLETED",
+      completedAt: now,
+      notes: `Consolidated into AI Multi-Stop Route #${task.id}`,
+    },
+  });
+
   // Update truck status to IN_USE if it was AVAILABLE
   if (truck && truck.status === "AVAILABLE") {
     await prisma.truck.update({

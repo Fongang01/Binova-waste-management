@@ -209,6 +209,7 @@ class _TasksList extends StatelessWidget {
                           icon: const Icon(Icons.map_rounded, color: AppTheme.primaryEmerald),
                           tooltip: 'View on Map',
                           onPressed: () {
+                            context.read<DriverNotifier>().selectTask(task.id);
                             context.read<DriverNotifier>().setTabIndex(2);
                           },
                         ),

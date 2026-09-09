@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../../domain/entities/task_entity.dart';
 import 'truck_model.dart';
 
@@ -80,7 +81,6 @@ class TaskModel extends TaskEntity {
           DateTime.tryParse(map['assignedAt'].toString()) ?? assignedAt;
     }
 
-    final recommendedRoute = map['recommendedRoute']?.toString();
     double? distanceKm = (map['distanceKm'] as num?)?.toDouble() ??
         (map['distance'] as num?)?.toDouble();
     int? estimatedDuration = (map['estimatedDuration'] as num?)?.toInt();
@@ -92,67 +92,103 @@ class TaskModel extends TaskEntity {
       stopOrder = int.tryParse(match.group(1) ?? '');
     }
 
-    final List<RouteStopEntity> routeStops = [];
+    dynamic parsedRoute;
+    String? recommendedRouteStr;
+    final rawRoute = map['recommendedRoute'];
 
-    if (recommendedRoute != null && recommendedRoute.isNotEmpty) {
+    if (rawRoute is Map) {
+      parsedRoute = rawRoute;
       try {
-        final dynamic parsed = jsonDecode(recommendedRoute);
-        if (parsed is Map) {
-          if (parsed['distanceKm'] != null && (distanceKm == null || distanceKm == 0)) {
-            distanceKm = (parsed['distanceKm'] as num).toDouble();
-          }
-          if (parsed['durationMinutes'] != null && (estimatedDuration == null || estimatedDuration == 0)) {
-            estimatedDuration = (parsed['durationMinutes'] as num).toInt();
-          }
-
-          final rawStops = parsed['orderedStops'] ?? parsed['stops'];
-          final completedIds = (parsed['completedStopIds'] as List<dynamic>?)
-                  ?.map((e) => (e as num).toInt())
-                  .toList() ??
-              [];
-
-          if (rawStops is List) {
-            for (int i = 0; i < rawStops.length; i++) {
-              final stopMap = rawStops[i];
-              if (stopMap is Map) {
-                final stopId = (stopMap['id'] as num?)?.toInt() ??
-                    (stopMap['binId'] as num?)?.toInt() ??
-                    (i + 1);
-                final sBinId = (stopMap['binId'] as num?)?.toInt() ?? stopId;
-                final sBinCode = (stopMap['binCode'] ?? 'BIN-$sBinId').toString();
-                final sAddr = (stopMap['address'] ?? 'Yaoundé, Cameroon').toString();
-                final sLat = (stopMap['latitude'] as num?)?.toDouble() ?? 0.0;
-                final sLng = (stopMap['longitude'] as num?)?.toDouble() ?? 0.0;
-                final sFill = ((stopMap['fillLevel'] ?? 0) as num).toInt();
-                final sCap = ((stopMap['capacity'] ?? 50) as num).toDouble();
-                final sOrder = (stopMap['stopOrder'] as num?)?.toInt() ?? (i + 1);
-                final sCompleted = stopMap['isCompleted'] == true || completedIds.contains(stopId);
-
-                final pStr = (stopMap['priority'] ?? '').toString();
-                TaskPriority sPriority = TaskPriority.medium;
-                if (pStr == 'LOW') sPriority = TaskPriority.low;
-                if (pStr == 'NORMAL') sPriority = TaskPriority.medium;
-                if (pStr == 'HIGH') sPriority = TaskPriority.high;
-                if (pStr == 'CRITICAL' || pStr == 'URGENT') sPriority = TaskPriority.urgent;
-
-                routeStops.add(RouteStopEntity(
-                  id: stopId,
-                  binId: sBinId,
-                  binCode: sBinCode,
-                  address: sAddr,
-                  latitude: sLat,
-                  longitude: sLng,
-                  fillLevel: sFill,
-                  capacity: sCap,
-                  priority: sPriority,
-                  stopOrder: sOrder,
-                  isCompleted: sCompleted,
-                ));
-              }
+        recommendedRouteStr = jsonEncode(rawRoute);
+      } catch (_) {
+        recommendedRouteStr = null;
+      }
+    } else if (rawRoute is String && rawRoute.trim().isNotEmpty) {
+      recommendedRouteStr = rawRoute;
+      try {
+        parsedRoute = jsonDecode(rawRoute);
+      } catch (e) {
+        // Double-decode attempt in case string was double escaped
+        try {
+          if (rawRoute.startsWith('"{') && rawRoute.endsWith('}"')) {
+            final unescaped = jsonDecode(rawRoute);
+            if (unescaped is String) {
+              parsedRoute = jsonDecode(unescaped);
             }
           }
+        } catch (_) {}
+      }
+    }
+
+    final List<RouteStopEntity> routeStops = [];
+
+    if (parsedRoute is Map) {
+      if (parsedRoute['distanceKm'] != null && (distanceKm == null || distanceKm == 0)) {
+        distanceKm = (parsedRoute['distanceKm'] as num).toDouble();
+      }
+      if (parsedRoute['durationMinutes'] != null && (estimatedDuration == null || estimatedDuration == 0)) {
+        estimatedDuration = (parsedRoute['durationMinutes'] as num).toInt();
+      }
+
+      final rawStops = parsedRoute['orderedStops'] ?? parsedRoute['stops'];
+      final completedIds = (parsedRoute['completedStopIds'] as List<dynamic>?)
+              ?.map((e) => (e as num).toInt())
+              .toList() ??
+          [];
+
+      if (rawStops is List) {
+        for (int i = 0; i < rawStops.length; i++) {
+          final stopMap = rawStops[i];
+          if (stopMap is Map) {
+            final stopId = (stopMap['id'] as num?)?.toInt() ??
+                (stopMap['binId'] as num?)?.toInt() ??
+                (i + 1);
+            final sBinId = (stopMap['binId'] as num?)?.toInt() ?? stopId;
+            final sBinCode = (stopMap['binCode'] ?? 'BIN-$sBinId').toString();
+            final sAddr = (stopMap['address'] ?? 'Yaoundé, Cameroon').toString();
+            final sLat = (stopMap['latitude'] as num?)?.toDouble() ?? 0.0;
+            final sLng = (stopMap['longitude'] as num?)?.toDouble() ?? 0.0;
+            final sFill = ((stopMap['fillLevel'] ?? 0) as num).toInt();
+            final sCap = ((stopMap['capacity'] ?? 50) as num).toDouble();
+            final sOrder = (stopMap['stopOrder'] as num?)?.toInt() ?? (i + 1);
+            final sCompleted = stopMap['isCompleted'] == true || completedIds.contains(stopId);
+
+            final pStr = (stopMap['priority'] ?? '').toString().toUpperCase();
+            TaskPriority sPriority = TaskPriority.medium;
+            if (pStr == 'LOW') sPriority = TaskPriority.low;
+            if (pStr == 'NORMAL') sPriority = TaskPriority.medium;
+            if (pStr == 'HIGH') sPriority = TaskPriority.high;
+            if (pStr == 'CRITICAL' || pStr == 'URGENT') sPriority = TaskPriority.urgent;
+
+            routeStops.add(RouteStopEntity(
+              id: stopId,
+              binId: sBinId,
+              binCode: sBinCode,
+              address: sAddr,
+              latitude: sLat,
+              longitude: sLng,
+              fillLevel: sFill,
+              capacity: sCap,
+              priority: sPriority,
+              stopOrder: sOrder,
+              isCompleted: sCompleted,
+            ));
+          }
         }
-      } catch (_) {}
+      }
+    }
+
+    // Diagnostic logging for AI collection routes
+    final isAi = routeStops.isNotEmpty || (parsedRoute is Map && parsedRoute['isAiOptimized'] == true);
+    if (isAi) {
+      final dynamic geom = parsedRoute is Map ? (parsedRoute['geometry'] ?? parsedRoute['route']?['geometry']) : null;
+      int geomCount = 0;
+      if (geom is Map && geom['coordinates'] is List) {
+        geomCount = (geom['coordinates'] as List).length;
+      } else if (geom is List) {
+        geomCount = geom.length;
+      }
+      debugPrint('[BINOVA AI Route] Task #${map['id']}: ${routeStops.length} stops, $geomCount geometry coords');
     }
 
     // If routeStops is not empty, use the first stop or current active stop for main coordinate fallbacks if needed
@@ -172,7 +208,7 @@ class TaskModel extends TaskEntity {
       priority: priority,
       status: status,
       assignedTime: assignedAt,
-      recommendedRoute: recommendedRoute,
+      recommendedRoute: recommendedRouteStr,
       distanceKm: distanceKm,
       estimatedDuration: estimatedDuration,
       stopOrder: stopOrder,
