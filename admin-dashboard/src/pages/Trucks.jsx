@@ -268,59 +268,84 @@ export default function Trucks(){
             </div>
           </div>
 
-          {/* Search & Filter Toolbar */}
-          <div className="toolbar-card">
-            <div className="search-field">
-              <Search size={16} />
-              <input
-                type="text"
-                placeholder="Search by registration number, driver, or ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button type="button" className="search-clear-btn" onClick={() => setSearchQuery('')} aria-label="Clear search">
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            <div className="filter-pill-group">
+          {/* SEARCH & FILTERS TOOLBAR */}
+          <div className="collections-toolbar-card">
+            {/* Status Tabs Row */}
+            <div className="collections-tabs-row" role="tablist" aria-label="Truck Status Tabs">
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'ALL' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'ALL'}
+                className={`collections-tab-btn ${statusFilter === 'ALL' ? 'active' : ''}`}
                 onClick={() => handleFilterChange('ALL')}
               >
-                All ({items.length})
+                <span>All Trucks</span>
+                <span className="collections-tab-count">{items.length}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'AVAILABLE' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'AVAILABLE'}
+                className={`collections-tab-btn ${statusFilter === 'AVAILABLE' ? 'active' : ''}`}
                 onClick={() => handleFilterChange('AVAILABLE')}
               >
-                Available ({items.filter(t => t.status === 'AVAILABLE').length})
+                <span>Available</span>
+                <span className="collections-tab-count">{items.filter(t => t.status === 'AVAILABLE').length}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'IN_USE' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'IN_USE'}
+                className={`collections-tab-btn ${statusFilter === 'IN_USE' ? 'active' : ''}`}
                 onClick={() => handleFilterChange('IN_USE')}
               >
-                In Use ({items.filter(t => t.status === 'IN_USE').length})
+                <span>In Use</span>
+                <span className="collections-tab-count">{items.filter(t => t.status === 'IN_USE').length}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'MAINTENANCE' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'MAINTENANCE'}
+                className={`collections-tab-btn tab-danger ${statusFilter === 'MAINTENANCE' ? 'active' : ''}`}
                 onClick={() => handleFilterChange('MAINTENANCE')}
               >
-                Maintenance ({items.filter(t => t.status === 'MAINTENANCE').length})
+                <span>Maintenance</span>
+                <span className="collections-tab-count">{items.filter(t => t.status === 'MAINTENANCE').length}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'INACTIVE' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'INACTIVE'}
+                className={`collections-tab-btn ${statusFilter === 'INACTIVE' ? 'active' : ''}`}
                 onClick={() => handleFilterChange('INACTIVE')}
               >
-                Inactive ({items.filter(t => t.status === 'INACTIVE').length})
+                <span>Inactive</span>
+                <span className="collections-tab-count">{items.filter(t => t.status === 'INACTIVE').length}</span>
               </button>
+            </div>
+
+            {/* Search Row */}
+            <div className="collections-search-filter-row">
+              <div className="collections-search-box">
+                <Search size={16} />
+                <input
+                  type="text"
+                  placeholder="Search trucks by registration number, driver, or ID..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="Search trucks"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="collections-search-clear"
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Clear search"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -339,14 +364,14 @@ export default function Trucks(){
           {!loading && filteredTrucks.length > 0 && (
             <div className="table-card">
               <div className="table-wrap">
-                <table className="data-table">
+                <table className="data-table collections-table">
                   <thead>
                     <tr>
-                      <th>Registration</th>
-                      <th>Capacity (Tons)</th>
-                      <th>Status</th>
-                      <th>Assigned Driver</th>
-                      <th>Actions</th>
+                      <th style={{ minWidth: '180px' }}>Registration</th>
+                      <th style={{ width: '150px' }}>Capacity (Tons)</th>
+                      <th style={{ width: '130px' }}>Status</th>
+                      <th style={{ minWidth: '180px' }}>Assigned Driver</th>
+                      <th style={{ width: '140px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -359,11 +384,13 @@ export default function Trucks(){
                       >
                         <td>
                           <div className="font-semibold text-dark flex-align-center gap-6">
-                            <TruckIcon size={16} className="text-muted" />
-                            <span>{truck.registrationNumber || truck.registration}</span>
+                            <TruckIcon size={15} className="text-muted" style={{ flexShrink: 0 }} />
+                            <span className="font-mono text-xs font-semibold">{truck.registrationNumber || truck.registration}</span>
                           </div>
                         </td>
-                        <td>{truck.capacity} Tons</td>
+                        <td>
+                          <span className="font-mono text-xs">{truck.capacity} Tons</span>
+                        </td>
                         <td>
                           <span className={`status-badge status-${(truck.status || 'AVAILABLE').toLowerCase()}`}>
                             {truck.status || 'AVAILABLE'}
@@ -372,15 +399,15 @@ export default function Trucks(){
                         <td>
                           {truck.driver ? (
                             <div className="flex-align-center gap-6">
-                              <User size={14} className="text-muted" />
-                              <span className="font-medium">{truck.driver.firstName} {truck.driver.lastName}</span>
+                              <User size={14} className="text-muted" style={{ flexShrink: 0 }} />
+                              <span className="text-dark font-medium">{truck.driver.firstName} {truck.driver.lastName}</span>
                             </div>
                           ) : (
                             <span className="text-muted text-xs">Unassigned</span>
                           )}
                         </td>
-                        <td>
-                          <div className="row-actions" onClick={(e) => e.stopPropagation()}>
+                        <td style={{ textAlign: 'right' }}>
+                          <div className="row-actions" style={{ justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
                               className="table-action view"

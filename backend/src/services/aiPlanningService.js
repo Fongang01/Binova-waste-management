@@ -638,8 +638,8 @@ export async function approveAndCreateTasks(approvalData, adminUser) {
   const routeString = JSON.stringify(completeRoutePayload);
 
   const taskNotes = notes
-    ? `[AI Multi-Stop Route: ${formattedStops.length} Stops] ${notes} (Approved by ${adminName})`
-    : `[AI Multi-Stop Route: ${formattedStops.length} Stops] Approved by ${adminName} on ${now.toLocaleDateString()}`;
+    ? `[AI Route: ${formattedStops.length} ${formattedStops.length === 1 ? "Stop" : "Stops"}] ${notes} (Approved by ${adminName})`
+    : `[AI Route: ${formattedStops.length} ${formattedStops.length === 1 ? "Stop" : "Stops"}] Approved by ${adminName} on ${now.toLocaleDateString()}`;
 
   // Create unified collection task
   const task = await prisma.collectionTask.create({

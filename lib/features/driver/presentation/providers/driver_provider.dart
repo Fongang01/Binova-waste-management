@@ -85,6 +85,70 @@ class DriverNotifier extends ChangeNotifier {
     }
   }
 
+  /// Returns all active, uncompleted collection stops that strictly belong to
+  /// confirmed collection tasks assigned to this authenticated driver.
+  List<RouteStopEntity> get assignedActiveStops {
+    final active = _tasks.where((t) => t.status != TaskStatus.completed).toList();
+    if (active.isEmpty) return [];
+
+    final List<RouteStopEntity> stops = [];
+    final seenBinIds = <int>{};
+
+    for (final task in active) {
+      if (task.routeStops.isNotEmpty) {
+        for (final stop in task.routeStops) {
+          if (!stop.isCompleted && !seenBinIds.contains(stop.binId)) {
+            seenBinIds.add(stop.binId);
+            stops.add(stop);
+          }
+        }
+      } else if (task.latitude != 0 && task.longitude != 0) {
+        final bId = int.tryParse(task.binId) ?? 0;
+        if (!seenBinIds.contains(bId)) {
+          seenBinIds.add(bId);
+          stops.add(RouteStopEntity(
+            id: bId,
+            binId: bId,
+            binCode: task.binCode ?? 'BIN-$bId',
+            address: task.location,
+            latitude: task.latitude,
+            longitude: task.longitude,
+            fillLevel: task.fillLevel,
+            capacity: 50.0,
+            priority: task.priority,
+            stopOrder: stops.length + 1,
+            isCompleted: false,
+          ));
+        }
+      }
+    }
+
+    // Number sequentially
+    return stops.asMap().entries.map((e) {
+      final idx = e.key;
+      final s = e.value;
+      if (s.stopOrder != idx + 1) {
+        return RouteStopEntity(
+          id: s.id,
+          binId: s.binId,
+          binCode: s.binCode,
+          address: s.address,
+          latitude: s.latitude,
+          longitude: s.longitude,
+          fillLevel: s.fillLevel,
+          capacity: s.capacity,
+          priority: s.priority,
+          stopOrder: idx + 1,
+          isCompleted: s.isCompleted,
+        );
+      }
+      return s;
+    }).toList();
+  }
+
+  /// Exact pending stop count strictly from confirmed assigned active bins
+  int get pendingStopsCount => assignedActiveStops.length;
+
   Future<void> updateStatus(String taskId, TaskStatus status) async {
     try {
       await updateTaskStatusUseCase(UpdateTaskStatusParams(taskId: taskId, status: status));

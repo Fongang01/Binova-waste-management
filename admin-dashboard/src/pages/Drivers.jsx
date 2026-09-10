@@ -322,45 +322,64 @@ export default function Drivers(){
             </div>
           </div>
 
-          {/* Search and Status Toolbar */}
-          <div className="toolbar-card">
-            <div className="search-field">
-              <Search size={16} />
-              <input
-                type="text"
-                placeholder="Search by name, email, phone, truck, or ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button type="button" className="search-clear-btn" onClick={() => setSearchQuery('')} aria-label="Clear search">
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            <div className="filter-pill-group">
+          {/* SEARCH & FILTERS TOOLBAR */}
+          <div className="collections-toolbar-card">
+            {/* Status Tabs Row */}
+            <div className="collections-tabs-row" role="tablist" aria-label="Driver Status Tabs">
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'ALL' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'ALL'}
+                className={`collections-tab-btn ${statusFilter === 'ALL' ? 'active' : ''}`}
                 onClick={() => handleFilterChange('ALL')}
               >
-                All ({items.length})
+                <span>All Drivers</span>
+                <span className="collections-tab-count">{items.length}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'ACTIVE' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'ACTIVE'}
+                className={`collections-tab-btn ${statusFilter === 'ACTIVE' ? 'active' : ''}`}
                 onClick={() => handleFilterChange('ACTIVE')}
               >
-                Active ({items.filter(d => d.status === 'ACTIVE').length})
+                <span>Active</span>
+                <span className="collections-tab-count">{items.filter(d => d.status === 'ACTIVE').length}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'INACTIVE' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'INACTIVE'}
+                className={`collections-tab-btn ${statusFilter === 'INACTIVE' ? 'active' : ''}`}
                 onClick={() => handleFilterChange('INACTIVE')}
               >
-                Inactive ({items.filter(d => d.status === 'INACTIVE').length})
+                <span>Inactive</span>
+                <span className="collections-tab-count">{items.filter(d => d.status === 'INACTIVE').length}</span>
               </button>
+            </div>
+
+            {/* Search Row */}
+            <div className="collections-search-filter-row">
+              <div className="collections-search-box">
+                <Search size={16} />
+                <input
+                  type="text"
+                  placeholder="Search drivers by name, email, phone, truck, or ID..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="Search drivers"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="collections-search-clear"
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Clear search"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -379,15 +398,15 @@ export default function Drivers(){
           {!loading && filteredDrivers.length > 0 && (
             <div className="table-card">
               <div className="table-wrap">
-                <table className="data-table">
+                <table className="data-table collections-table">
                   <thead>
                     <tr>
-                      <th>Driver Name</th>
-                      <th>Email Address</th>
-                      <th>Phone Number</th>
-                      <th>Assigned Truck</th>
-                      <th>Status</th>
-                      <th>Actions</th>
+                      <th style={{ minWidth: '200px' }}>Driver Name</th>
+                      <th style={{ minWidth: '180px' }}>Email Address</th>
+                      <th style={{ width: '140px' }}>Phone Number</th>
+                      <th style={{ width: '150px' }}>Assigned Truck</th>
+                      <th style={{ width: '110px' }}>Status</th>
+                      <th style={{ width: '140px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -405,12 +424,16 @@ export default function Drivers(){
                             </div>
                             <div>
                               <div className="font-semibold text-dark">{getFullName(driver)}</div>
-                              <div className="text-muted text-xs">ID: DRV-{driver.id}</div>
+                              <div className="text-muted text-xs font-mono">DRV-{driver.id}</div>
                             </div>
                           </div>
                         </td>
-                        <td>{driver.email}</td>
-                        <td>{driver.phone || '—'}</td>
+                        <td>
+                          <span className="text-dark">{driver.email}</span>
+                        </td>
+                        <td>
+                          <span className="text-muted font-mono text-xs">{driver.phone || '—'}</span>
+                        </td>
                         <td>
                           {driver.truck ? (
                             <span className="truck-tag">
@@ -430,8 +453,8 @@ export default function Drivers(){
                             {driver.status}
                           </span>
                         </td>
-                        <td>
-                          <div className="row-actions" onClick={(e) => e.stopPropagation()}>
+                        <td style={{ textAlign: 'right' }}>
+                          <div className="row-actions" style={{ justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
                               className="table-action view"

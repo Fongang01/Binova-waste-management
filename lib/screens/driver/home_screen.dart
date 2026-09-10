@@ -175,7 +175,7 @@ class DriverHomeScreen extends StatelessWidget {
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Text('Bin ${task.binId}',
+                                              Text(task.binCode ?? 'Bin ${task.binId}',
                                                   style: const TextStyle(
                                                       fontWeight: FontWeight.bold, fontSize: 14)),
                                               const SizedBox(height: 2),
@@ -209,7 +209,7 @@ class DriverHomeScreen extends StatelessWidget {
                             'AI Optimized Route',
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
-                          if (driverNotifier.activeAiTask != null)
+                          if (driverNotifier.pendingStopsCount > 0)
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
@@ -218,7 +218,7 @@ class DriverHomeScreen extends StatelessWidget {
                                 border: Border.all(color: AppTheme.primaryEmerald.withOpacity(0.3)),
                               ),
                               child: Text(
-                                '${driverNotifier.activeAiTask!.pendingStopsCount} Pending',
+                                '${driverNotifier.pendingStopsCount} Pending',
                                 style: const TextStyle(
                                   color: AppTheme.primaryEmerald,
                                   fontSize: 12,
@@ -233,7 +233,11 @@ class DriverHomeScreen extends StatelessWidget {
                       Builder(
                         builder: (context) {
                           final aiTask = driverNotifier.activeAiTask;
-                          if (aiTask != null) {
+                          final assignedStops = driverNotifier.assignedActiveStops;
+                          final pendingCount = driverNotifier.pendingStopsCount;
+                          final nextStop = assignedStops.where((s) => !s.isCompleted).firstOrNull;
+
+                          if (aiTask != null || assignedStops.isNotEmpty) {
                             return BinovaCard(
                               useGlass: true,
                               padding: const EdgeInsets.all(18),
@@ -262,9 +266,9 @@ class DriverHomeScreen extends StatelessWidget {
                                           children: [
                                             Row(
                                               children: [
-                                                const Text(
-                                                  'AI DISPATCHED ROUTE',
-                                                  style: TextStyle(
+                                                Text(
+                                                  aiTask != null ? 'AI DISPATCHED ROUTE' : 'ASSIGNED COLLECTION ROUTE',
+                                                  style: const TextStyle(
                                                     fontSize: 11,
                                                     fontWeight: FontWeight.w800,
                                                     letterSpacing: 0.8,
@@ -273,7 +277,7 @@ class DriverHomeScreen extends StatelessWidget {
                                                 ),
                                                 const Spacer(),
                                                 Text(
-                                                  '${aiTask.totalStops} Stops Total',
+                                                  '${assignedStops.length} Stops Total',
                                                   style: const TextStyle(
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.w700,
@@ -284,7 +288,9 @@ class DriverHomeScreen extends StatelessWidget {
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
-                                              '${aiTask.distanceKm ?? 0} km • Est. ${aiTask.estimatedDuration ?? 0} min',
+                                              aiTask?.distanceKm != null
+                                                  ? '${aiTask!.distanceKm!.toStringAsFixed(1)} km • Est. ${aiTask.estimatedDuration ?? 0} min'
+                                                  : '$pendingCount stops remaining to collect',
                                               style: TextStyle(
                                                 fontSize: 13,
                                                 color: Colors.grey.shade700,
@@ -314,8 +320,8 @@ class DriverHomeScreen extends StatelessWidget {
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
-                                            aiTask.currentStop != null
-                                                ? 'Next: Stop #${aiTask.currentStopNumber} — ${aiTask.currentStop!.binCode} (${aiTask.currentStop!.fillLevel}%)'
+                                            nextStop != null
+                                                ? 'Next: Stop #${nextStop.stopOrder} — ${nextStop.binCode} (${nextStop.fillLevel}%)'
                                                 : 'All route stops completed',
                                             style: const TextStyle(
                                               fontSize: 13,

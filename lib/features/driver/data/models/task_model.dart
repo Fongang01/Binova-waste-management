@@ -10,6 +10,7 @@ class TaskModel extends TaskEntity {
   const TaskModel({
     required super.id,
     required super.binId,
+    super.binCode,
     required super.location,
     required super.latitude,
     required super.longitude,
@@ -29,6 +30,7 @@ class TaskModel extends TaskEntity {
     return TaskModel(
       id: id,
       binId: map['binId'] ?? '',
+      binCode: map['binCode']?.toString(),
       location: map['location'] ?? '',
       latitude: (map['latitude'] as num).toDouble(),
       longitude: (map['longitude'] as num).toDouble(),
@@ -55,6 +57,7 @@ class TaskModel extends TaskEntity {
 
   factory TaskModel.fromApi(Map<String, dynamic> map) {
     final bin = map['bin'] ?? {};
+    final String? binCode = (bin['binCode'] ?? bin['code'] ?? (map['binId'] != null ? 'BIN-${map['binId']}' : null))?.toString();
     double lat = 0;
     double lng = 0;
     try {
@@ -198,9 +201,28 @@ class TaskModel extends TaskEntity {
       lng = firstStop.longitude;
     }
 
+    // Ensure every task has at least its confirmed assigned bin as a RouteStopEntity
+    final taskBinIdInt = int.tryParse((map['binId'] ?? '').toString()) ?? (bin['id'] as num?)?.toInt() ?? 0;
+    if (routeStops.isEmpty && lat != 0.0 && lng != 0.0) {
+      routeStops.add(RouteStopEntity(
+        id: taskBinIdInt,
+        binId: taskBinIdInt,
+        binCode: binCode ?? 'BIN-$taskBinIdInt',
+        address: (bin['address'] ?? 'Yaoundé, Cameroon').toString(),
+        latitude: lat,
+        longitude: lng,
+        fillLevel: ((bin['currentFillLevel'] ?? 0) as num).toInt(),
+        capacity: ((bin['capacity'] ?? 50) as num).toDouble(),
+        priority: priority,
+        stopOrder: 1,
+        isCompleted: status == TaskStatus.completed,
+      ));
+    }
+
     return TaskModel(
       id: (map['id'] ?? '').toString(),
       binId: (map['binId'] ?? '').toString(),
+      binCode: binCode,
       location: bin['address'] ?? (routeStops.isNotEmpty ? routeStops.first.address : ''),
       latitude: lat,
       longitude: lng,

@@ -27,6 +27,47 @@ export async function listBins(filter) {
   return prisma.bin.findMany({ where });
 }
 
+export async function listDriverAssignedBins(driverId) {
+  const activeTasks = await prisma.collectionTask.findMany({
+    where: {
+      driverId: Number(driverId),
+      status: { in: ["ASSIGNED", "IN_PROGRESS", "PENDING"] },
+    },
+    select: {
+      binId: true,
+      recommendedRoute: true,
+    },
+  });
+
+  const binIds = new Set();
+  for (const task of activeTasks) {
+    if (task.binId) binIds.add(Number(task.binId));
+    if (task.recommendedRoute) {
+      try {
+        const parsed = typeof task.recommendedRoute === "string" ? JSON.parse(task.recommendedRoute) : task.recommendedRoute;
+        const stops = parsed?.orderedStops || parsed?.stops;
+        if (Array.isArray(stops)) {
+          stops.forEach((s) => {
+            const bId = s.binId || s.id;
+            if (bId) binIds.add(Number(bId));
+          });
+        }
+      } catch (_) {}
+    }
+  }
+
+  if (binIds.size === 0) {
+    return [];
+  }
+
+  return prisma.bin.findMany({
+    where: {
+      id: { in: Array.from(binIds) },
+      status: "ACTIVE",
+    },
+  });
+}
+
 export async function getBin(id) {
   return prisma.bin.findUnique({ where: { id: Number(id) } });
 }

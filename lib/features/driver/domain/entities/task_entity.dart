@@ -49,6 +49,7 @@ class RouteStopEntity extends Equatable {
 class TaskEntity extends Equatable {
   final String id;
   final String binId;
+  final String? binCode;
   final String location;
   final double latitude;
   final double longitude;
@@ -65,6 +66,7 @@ class TaskEntity extends Equatable {
   const TaskEntity({
     required this.id,
     required this.binId,
+    this.binCode,
     required this.location,
     required this.latitude,
     required this.longitude,
@@ -108,6 +110,7 @@ class TaskEntity extends Equatable {
   List<Object?> get props => [
         id,
         binId,
+        binCode,
         location,
         latitude,
         longitude,

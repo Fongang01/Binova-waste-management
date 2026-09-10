@@ -166,38 +166,20 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
   Future<void> _updateDriverNavigationRoute(TaskEntity? aiTask, List<TaskEntity> activeTasks) async {
     if (_fetchingLiveRoute) return;
 
-    // 1. Destination Waypoints in Confirmed AI Order
+    final driverNotifier = context.read<DriverNotifier>();
+    final assignedStops = driverNotifier.assignedActiveStops;
+
+    if (assignedStops.isEmpty) {
+      if (_liveRoadRouteCoordinates.isNotEmpty && mounted) {
+        setState(() => _liveRoadRouteCoordinates = []);
+      }
+      return;
+    }
+
     final List<LatLng> waypoints = [];
-    if (aiTask != null && aiTask.routeStops.isNotEmpty) {
-      // Get all pending (uncompleted) stops in confirmed sequence
-      final pendingStops = aiTask.routeStops
-          .where((s) => !s.isCompleted && s.latitude != 0 && s.longitude != 0)
-          .toList();
-
-      if (pendingStops.isEmpty) {
-        if (_liveRoadRouteCoordinates.isNotEmpty && mounted) {
-          setState(() => _liveRoadRouteCoordinates = []);
-        }
-        return;
-      }
-
-      for (final s in pendingStops) {
+    for (final s in assignedStops) {
+      if (s.latitude != 0 && s.longitude != 0) {
         waypoints.add(LatLng(s.latitude, s.longitude));
-      }
-    } else {
-      final validTasks = activeTasks
-          .where((t) => t.status != TaskStatus.completed && t.latitude != 0 && t.longitude != 0)
-          .toList();
-
-      if (validTasks.isEmpty) {
-        if (_liveRoadRouteCoordinates.isNotEmpty && mounted) {
-          setState(() => _liveRoadRouteCoordinates = []);
-        }
-        return;
-      }
-
-      for (final t in validTasks) {
-        waypoints.add(LatLng(t.latitude, t.longitude));
       }
     }
 
@@ -209,15 +191,16 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
     }
 
     // 2. Route Origin: Driver's actual live GPS location
-    final LatLng origin;
-    if (_currentPosition != null) {
-      origin = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
-    } else {
-      origin = _yaoundeCenter;
+    if (_currentPosition == null) {
+      if (_liveRoadRouteCoordinates.isNotEmpty && mounted) {
+        setState(() => _liveRoadRouteCoordinates = []);
+      }
+      return;
     }
+    final LatLng origin = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
 
     // Cache key to prevent redundant network queries
-    final routeKey = '${origin.latitude.toStringAsFixed(4)}_${origin.longitude.toStringAsFixed(4)}_${waypoints.map((w) => '${w.latitude.toStringAsFixed(4)},${w.longitude.toStringAsFixed(4)}').join(';')}_${aiTask?.pendingStopsCount}';
+    final routeKey = '${origin.latitude.toStringAsFixed(4)}_${origin.longitude.toStringAsFixed(4)}_${waypoints.map((w) => '${w.latitude.toStringAsFixed(4)},${w.longitude.toStringAsFixed(4)}').join(';')}_${assignedStops.length}';
     if (routeKey == _lastRouteKey) return;
 
     _fetchingLiveRoute = true;
@@ -312,9 +295,10 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
 
   /// Automatically fit map camera when an AI task or route is loaded
   void _checkAndAutoFitCamera(TaskEntity? aiTask, List<TaskEntity> activeTasks) {
-    final currentKey = aiTask != null
-        ? '${aiTask.id}_${aiTask.routeStops.length}_${aiTask.pendingStopsCount}'
-        : (activeTasks.isNotEmpty ? activeTasks.map((t) => t.id).join(',') : 'none');
+    final driverNotifier = context.read<DriverNotifier>();
+    final pendingCount = driverNotifier.pendingStopsCount;
+    final assignedKey = driverNotifier.assignedActiveStops.map((s) => '${s.id}_${s.isCompleted}').join(',');
+    final currentKey = '$pendingCount:$assignedKey';
 
     if (currentKey == _lastFittedKey) return;
 
@@ -330,13 +314,10 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
     _mapController.move(_yaoundeCenter, 13.0);
   }
 
-  /// Fit map bounds to encompass all assigned route stops, road polyline geometry, and driver GPS
+  /// Fit map bounds to encompass all active assigned route stops, road polyline geometry, and driver GPS
   void _fitMapBounds() {
     final driverNotifier = context.read<DriverNotifier>();
-    final aiTask = driverNotifier.activeAiTask;
-    final activeTasks = driverNotifier.tasks
-        .where((t) => t.status != TaskStatus.completed && t.latitude != 0 && t.longitude != 0)
-        .toList();
+    final assignedStops = driverNotifier.assignedActiveStops;
 
     final List<LatLng> points = [];
 
@@ -345,16 +326,10 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
       points.addAll(_liveRoadRouteCoordinates);
     }
 
-    // 2. Include all assigned route stops
-    if (aiTask != null) {
-      for (final s in aiTask.routeStops) {
-        if (s.latitude != 0.0 && s.longitude != 0.0) {
-          points.add(LatLng(s.latitude, s.longitude));
-        }
-      }
-    } else {
-      for (final t in activeTasks) {
-        points.add(LatLng(t.latitude, t.longitude));
+    // 2. Include all confirmed assigned active route stops
+    for (final s in assignedStops) {
+      if (s.latitude != 0.0 && s.longitude != 0.0) {
+        points.add(LatLng(s.latitude, s.longitude));
       }
     }
 
@@ -447,28 +422,24 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
       );
     }
 
-    // 2. AI ROUTE ORDERED STOPS (Numbered Badges: #1, #2, #3, ...) — ONLY ASSIGNED BINS
-    if (aiTask != null && aiTask.routeStops.isNotEmpty) {
-      for (final stop in aiTask.routeStops) {
-        if (stop.latitude == 0 || stop.longitude == 0) continue;
+    // 2. CONFIRMED ASSIGNED BINS ONLY (Numbered Badges: #1, #2, ...)
+    final driverNotifier = context.read<DriverNotifier>();
+    final assignedStops = driverNotifier.assignedActiveStops;
 
-        final isCritical = stop.fillLevel >= 80 || stop.priority == TaskPriority.urgent;
-        final isModerate = (stop.fillLevel >= 50 && stop.fillLevel < 80) || stop.priority == TaskPriority.high;
-
-        Color pinColor = const Color(0xFF16A34A); // Normal Green
-        if (stop.isCompleted) {
-          pinColor = Colors.grey.shade400;
-        } else if (isCritical) {
-          pinColor = const Color(0xFFEF4444); // Critical Red
-        } else if (isModerate) {
-          pinColor = const Color(0xFFF59E0B); // Moderate Orange
+    for (final stop in assignedStops) {
+      if (stop.latitude != 0 && stop.longitude != 0) {
+        TaskEntity? associatedTask;
+        try {
+          associatedTask = activeTasks.firstWhere((t) => int.tryParse(t.binId) == stop.binId);
+        } catch (_) {
+          associatedTask = aiTask ?? (activeTasks.isNotEmpty ? activeTasks.first : null);
         }
 
         markers.add(
           Marker(
             point: LatLng(stop.latitude, stop.longitude),
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             alignment: Alignment.center,
             child: GestureDetector(
               onTap: () {
@@ -485,53 +456,10 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                 setState(() {
                   _selectedRouteStop = stop;
                   _selectedBin = syntheticBin;
-                  _associatedTask = aiTask;
+                  _associatedTask = associatedTask;
                 });
               },
-              child: _buildBinPinWidget(pinColor, stop.fillLevel, stopOrder: stop.stopOrder, isCompleted: stop.isCompleted),
-            ),
-          ),
-        );
-      }
-    } else {
-      // 3. Fallback: Manual tasks assigned strictly to this authenticated driver
-      for (final task in activeTasks) {
-        if (task.latitude == 0 || task.longitude == 0) continue;
-        final isCritical = task.fillLevel >= 80;
-        final isModerate = task.fillLevel >= 50 && task.fillLevel < 80;
-
-        Color pinColor = const Color(0xFF16A34A);
-        if (isCritical) {
-          pinColor = const Color(0xFFEF4444);
-        } else if (isModerate) {
-          pinColor = const Color(0xFFF59E0B);
-        }
-
-        markers.add(
-          Marker(
-            point: LatLng(task.latitude, task.longitude),
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            child: GestureDetector(
-              onTap: () {
-                final syntheticBin = BinMapItem(
-                  id: int.tryParse(task.binId) ?? 0,
-                  binCode: 'BIN-${task.binId}',
-                  latitude: task.latitude,
-                  longitude: task.longitude,
-                  address: task.location,
-                  capacity: 50,
-                  currentFillLevel: task.fillLevel,
-                  status: 'ACTIVE',
-                );
-                setState(() {
-                  _selectedRouteStop = null;
-                  _selectedBin = syntheticBin;
-                  _associatedTask = task;
-                });
-              },
-              child: _buildBinPinWidget(pinColor, task.fillLevel, stopOrder: task.stopOrder),
+              child: _buildBinPinWidget(const Color(0xFF16A34A), stop.fillLevel, stopOrder: stop.stopOrder),
             ),
           ),
         );
@@ -541,12 +469,12 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
     return markers;
   }
 
-  Widget _buildBinPinWidget(Color color, int fillLevel, {int? stopOrder, bool isCompleted = false}) {
+  Widget _buildBinPinWidget(Color color, int fillLevel, {int? stopOrder}) {
     return Container(
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: isCompleted ? Colors.grey.shade400 : color,
+        color: color,
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white, width: 2.2),
         boxShadow: [
@@ -558,22 +486,20 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
         ],
       ),
       child: Center(
-        child: isCompleted
-            ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
-            : (stopOrder != null
-                ? Text(
-                    '$stopOrder',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  )
-                : const Icon(
-                    Icons.delete_outline_rounded,
-                    color: Colors.white,
-                    size: 16,
-                  )),
+        child: stopOrder != null
+            ? Text(
+                '$stopOrder',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              )
+            : const Icon(
+                Icons.delete_outline_rounded,
+                color: Colors.white,
+                size: 16,
+              ),
       ),
     );
   }
@@ -591,21 +517,22 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
     }
 
     // Fallback: Connect driver GPS position to pending stops in confirmed order
-    final List<LatLng> fallbackPoints = [];
-    if (_currentPosition != null) {
-      fallbackPoints.add(LatLng(_currentPosition!.latitude, _currentPosition!.longitude));
+    if (_currentPosition == null) {
+      return [];
     }
-    if (aiTask != null && aiTask.routeStops.isNotEmpty) {
-      for (final s in aiTask.routeStops.where((s) => !s.isCompleted)) {
-        if (s.latitude != 0 && s.longitude != 0) {
-          fallbackPoints.add(LatLng(s.latitude, s.longitude));
-        }
-      }
-    } else {
-      for (final t in activeTasks.where((t) => t.status != TaskStatus.completed)) {
-        if (t.latitude != 0 && t.longitude != 0) {
-          fallbackPoints.add(LatLng(t.latitude, t.longitude));
-        }
+
+    final driverNotifier = context.read<DriverNotifier>();
+    final assignedStops = driverNotifier.assignedActiveStops;
+    if (assignedStops.isEmpty) {
+      return [];
+    }
+
+    final List<LatLng> fallbackPoints = [
+      LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+    ];
+    for (final s in assignedStops) {
+      if (s.latitude != 0 && s.longitude != 0) {
+        fallbackPoints.add(LatLng(s.latitude, s.longitude));
       }
     }
 
@@ -629,6 +556,8 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
     final activeTasks = driverNotifier.tasks
         .where((t) => t.status != TaskStatus.completed)
         .toList();
+    final assignedStops = driverNotifier.assignedActiveStops;
+    final pendingCount = driverNotifier.pendingStopsCount;
 
     // Trigger dynamic route calculation from driver GPS and auto-fit camera
     _updateDriverNavigationRoute(aiTask, activeTasks);
@@ -677,174 +606,214 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
             ],
           ),
 
-          // 2. TOP FLOATING APP BAR
+          // 2. TOP FLOATING APP BAR & NAVIGATION HUD / EMPTY STATE BANNER
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
             left: 16,
             right: 16,
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Builder(
-                  builder: (ctx) => Material(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    elevation: 4,
-                    shadowColor: Colors.black26,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () => Scaffold.of(ctx).openDrawer(),
-                      child: const Padding(
-                        padding: EdgeInsets.all(11),
-                        child: Icon(Icons.menu_rounded, color: AppTheme.darkText, size: 22),
+                // Top Header Row
+                Row(
+                  children: [
+                    Builder(
+                      builder: (ctx) => Material(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        elevation: 4,
+                        shadowColor: Colors.black26,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => Scaffold.of(ctx).openDrawer(),
+                          child: const Padding(
+                            padding: EdgeInsets.all(11),
+                            child: Icon(Icons.menu_rounded, color: AppTheme.darkText, size: 22),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 3)),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 9,
+                                    height: 9,
+                                    decoration: BoxDecoration(
+                                      color: pendingCount > 0
+                                          ? AppTheme.primaryEmerald
+                                          : Colors.grey.shade400,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      pendingCount > 0
+                                          ? (aiTask != null
+                                              ? 'Assigned AI Route: $pendingCount ${pendingCount == 1 ? "Stop" : "Stops"}'
+                                              : '$pendingCount Assigned ${pendingCount == 1 ? "Bin" : "Bins"}')
+                                          : 'No Active Tasks Assigned',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                        color: AppTheme.darkText,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (pendingCount > 0) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryEmerald.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '$pendingCount Pending',
+                                  style: const TextStyle(
+                                    color: AppTheme.primaryEmerald,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Material(
+                      color: Colors.white.withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(14),
+                      elevation: 3,
+                      shadowColor: Colors.black26,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: driverNotifier.isLoading ? null : _refreshAll,
+                        child: Padding(
+                          padding: const EdgeInsets.all(11),
+                          child: driverNotifier.isLoading
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(strokeWidth: 2.5, color: AppTheme.primaryEmerald),
+                                )
+                              : const Icon(Icons.refresh_rounded, color: AppTheme.primaryEmerald, size: 22),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Container(
+
+                const SizedBox(height: 8),
+
+                // Navigation HUD or Clean Empty State Banner
+                if (pendingCount > 0)
+                  Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color(0xFF0F172A),
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: const [
-                        BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 3)),
+                        BoxShadow(color: Colors.black38, blurRadius: 10, offset: Offset(0, 4)),
                       ],
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 9,
-                              height: 9,
-                              decoration: const BoxDecoration(
-                                color: AppTheme.primaryEmerald,
-                                shape: BoxShape.circle,
-                              ),
+                        const Icon(Icons.navigation_rounded, color: Color(0xFF10B981), size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Next: Stop #1 (${assignedStops.first.binCode}) • $pendingCount ${pendingCount == 1 ? "Stop" : "Stops"} Pending',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              aiTask != null
-                                  ? 'Assigned AI Route: ${aiTask.totalStops} Stops'
-                                  : (activeTasks.isNotEmpty
-                                      ? '${activeTasks.length} Assigned Bins'
-                                      : 'No Active Tasks Assigned'),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                color: AppTheme.darkText,
-                              ),
-                            ),
-                          ],
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
-                        if (aiTask != null || activeTasks.isNotEmpty)
+                        if (aiTask?.distanceKm != null) ...[
+                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: AppTheme.primaryEmerald.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(8),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              aiTask != null
-                                  ? '${aiTask.pendingStopsCount} Pending'
-                                  : '${activeTasks.length} Pending',
+                              '${aiTask!.distanceKm!.toStringAsFixed(1)} km',
                               style: const TextStyle(
-                                color: AppTheme.primaryEmerald,
+                                color: Color(0xFF10B981),
                                 fontWeight: FontWeight.w800,
                                 fontSize: 11,
                               ),
                             ),
                           ),
+                        ],
+                      ],
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2)),
+                      ],
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.location_searching_rounded, color: AppTheme.greyText, size: 16),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'No collection tasks assigned • Live GPS Standby',
+                            style: TextStyle(
+                              color: AppTheme.greyText,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Material(
-                  color: Colors.white.withValues(alpha: 0.95),
-                  borderRadius: BorderRadius.circular(14),
-                  elevation: 3,
-                  shadowColor: Colors.black26,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: driverNotifier.isLoading ? null : _refreshAll,
-                    child: Padding(
-                      padding: const EdgeInsets.all(11),
-                      child: driverNotifier.isLoading
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2.5, color: AppTheme.primaryEmerald),
-                            )
-                          : const Icon(Icons.refresh_rounded, color: AppTheme.primaryEmerald, size: 22),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
 
-          // 2.5 AI ROUTE NAVIGATION HUD
-          if (aiTask != null || activeTasks.isNotEmpty)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 64,
-              left: 16,
-              right: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black38, blurRadius: 10, offset: Offset(0, 4)),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.navigation_rounded, color: Color(0xFF10B981), size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        aiTask != null
-                            ? (aiTask.currentStop != null
-                                ? 'Next: Stop #${aiTask.currentStopNumber} (${aiTask.currentStop!.binCode}) • ${aiTask.pendingStopsCount} Remaining'
-                                : 'All ${aiTask.totalStops} AI Stops Completed!')
-                            : 'Collection Tasks: ${activeTasks.length} ${activeTasks.length == 1 ? "Stop" : "Stops"} Pending',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (aiTask?.distanceKm != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          '${aiTask!.distanceKm!.toStringAsFixed(1)} km',
-                          style: const TextStyle(
-                            color: Color(0xFF10B981),
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-
-          // 4. MAP CONTROLS
+          // 3. MAP CONTROLS
           Positioned(
             right: 16,
-            bottom: _selectedBin != null ? 330 : 24,
+            bottom: _selectedBin != null ? 220 : 20,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -856,7 +825,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                   onPressed: _showServerDiagnosticsSheet,
                   child: const Icon(Icons.dns_outlined, size: 19),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 // Fit All Route Bins Button
                 FloatingActionButton.small(
                   heroTag: 'map_fit_bounds',
@@ -866,7 +835,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                   onPressed: _fitMapBounds,
                   child: const Icon(Icons.center_focus_strong_rounded, size: 20),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 FloatingActionButton.small(
                   heroTag: 'map_yaounde_center',
                   backgroundColor: Colors.white,
@@ -875,7 +844,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                   onPressed: _recenterYaounde,
                   child: const Icon(Icons.location_city_rounded, size: 20),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 FloatingActionButton(
                   heroTag: 'map_my_location',
                   backgroundColor: AppTheme.primaryEmerald,
@@ -894,9 +863,10 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
             ),
           ),
 
+          // 4. SELECTED BIN DETAILS CARD
           if (_selectedBin != null)
             Positioned(
-              bottom: 20,
+              bottom: 16,
               left: 16,
               right: 16,
               child: _buildBinDetailsCard(
@@ -930,88 +900,98 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
       fillBarColor = const Color(0xFFF59E0B);
     }
 
-    return Card(
-      elevation: 10,
-      shadowColor: Colors.black38,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: isCritical
-                            ? Colors.red.shade50
-                            : (isWarning ? Colors.orange.shade50 : Colors.green.shade50),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        isAi ? Icons.alt_route_rounded : Icons.delete_sweep_rounded,
-                        color: isCritical
-                            ? Colors.red
-                            : (isWarning ? Colors.orange.shade800 : AppTheme.primaryEmerald),
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+    return SafeArea(
+      top: false,
+      child: Card(
+        elevation: 10,
+        shadowColor: Colors.black38,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
                       children: [
-                        Text(
-                          isAi ? 'Stop #${routeStop.stopOrder}: ${routeStop.binCode}' : bin.binCode,
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isCritical
+                                ? Colors.red.shade50
+                                : (isWarning ? Colors.orange.shade50 : Colors.green.shade50),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            isAi ? Icons.alt_route_rounded : Icons.delete_sweep_rounded,
+                            color: isCritical
+                                ? Colors.red
+                                : (isWarning ? Colors.orange.shade800 : AppTheme.primaryEmerald),
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isAi ? 'Stop #${routeStop.stopOrder}: ${routeStop.binCode}' : bin.binCode,
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                  ],
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, color: AppTheme.greyText, size: 22),
-                  onPressed: () => setState(() {
-                    _selectedBin = null;
-                    _associatedTask = null;
-                    _selectedRouteStop = null;
-                  }),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.location_on_outlined, size: 17, color: AppTheme.greyText),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    (isAi ? routeStop.address : bin.address).isNotEmpty
-                        ? (isAi ? routeStop.address : bin.address)
-                        : '${bin.latitude.toStringAsFixed(5)}°, ${bin.longitude.toStringAsFixed(5)}°',
-                    style: const TextStyle(color: AppTheme.darkText, fontSize: 13, height: 1.3),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: fillPercent,
-                minHeight: 8,
-                backgroundColor: Colors.grey.shade200,
-                valueColor: AlwaysStoppedAnimation<Color>(fillBarColor),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, color: AppTheme.greyText, size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => setState(() {
+                      _selectedBin = null;
+                      _associatedTask = null;
+                      _selectedRouteStop = null;
+                    }),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.location_on_outlined, size: 16, color: AppTheme.greyText),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      (isAi ? routeStop.address : bin.address).isNotEmpty
+                          ? (isAi ? routeStop.address : bin.address)
+                          : '${bin.latitude.toStringAsFixed(5)}°, ${bin.longitude.toStringAsFixed(5)}°',
+                      style: const TextStyle(color: AppTheme.darkText, fontSize: 12, height: 1.3),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: fillPercent,
+                  minHeight: 7,
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor: AlwaysStoppedAnimation<Color>(fillBarColor),
+                ),
+              ),
+              const SizedBox(height: 12),
             if (isAi)
               SizedBox(
                 width: double.infinity,
@@ -1043,9 +1023,12 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                           elevation: 0,
                         ),
                         icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 20),
-                        label: Text(
-                          'Complete Stop #${routeStop.stopOrder} Collection',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'Complete Stop #${routeStop.stopOrder} Collection',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
+                          ),
                         ),
                         onPressed: () async {
                           await notifier.completeStop(task!.id, routeStop.id);
@@ -1084,11 +1067,14 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
                     color: Colors.white,
                     size: 20,
                   ),
-                  label: Text(
-                    task.status == TaskStatus.inProgress
-                        ? 'Mark as Emptied & Complete'
-                        : 'Start Collection Route',
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      task.status == TaskStatus.inProgress
+                          ? 'Mark as Emptied & Complete'
+                          : 'Start Collection Route',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
+                    ),
                   ),
                   onPressed: () async {
                     if (task.status == TaskStatus.inProgress) {
@@ -1107,8 +1093,9 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   void _showServerDiagnosticsSheet() {
     final controller = TextEditingController(text: ApiConfig.baseUrl);
@@ -1122,7 +1109,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> with TickerProviderSt
       ),
       builder: (ctx) {
         return StatefulBuilder(
-          builder: (context, setModalState) {
+          builder: (sheetContext, setModalState) {
             return Padding(
               padding: EdgeInsets.only(
                 left: 24,

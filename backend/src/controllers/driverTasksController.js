@@ -1,5 +1,78 @@
 import prisma from "../config/prisma.js";
 
+/**
+ * Ensures that a driver's task/route contains ONLY confirmed assigned bins.
+ * Unassigned candidate bins or bins belonging to other tasks are strictly excluded.
+ */
+function sanitizeDriverTaskRoute(task, activeAssignedBinIds) {
+  if (!task || !task.recommendedRoute) {
+    return task;
+  }
+
+  let routeData = null;
+  try {
+    routeData = typeof task.recommendedRoute === "string" ? JSON.parse(task.recommendedRoute) : task.recommendedRoute;
+  } catch (_) {
+    return task;
+  }
+
+  if (!routeData || !Array.isArray(routeData.orderedStops)) {
+    return task;
+  }
+
+  const initialCount = routeData.orderedStops.length;
+
+  // Filter ordered stops to ONLY those belonging to the driver's confirmed active assigned bins or this task's assigned bin
+  let filteredStops = routeData.orderedStops.filter((stop) => {
+    const stopBinId = Number(stop.binId || stop.id);
+    return activeAssignedBinIds.has(stopBinId) || stopBinId === task.binId;
+  });
+
+  // If all candidate stops were filtered out but task has a valid assigned bin, ensure task's assigned bin is present
+  if (filteredStops.length === 0 && task.bin) {
+    filteredStops = [
+      {
+        id: task.bin.id,
+        binId: task.bin.id,
+        binCode: task.bin.binCode,
+        address: task.bin.address || "Yaoundé, Cameroon",
+        latitude: Number(task.bin.latitude),
+        longitude: Number(task.bin.longitude),
+        fillLevel: Number(task.bin.currentFillLevel) || 0,
+        capacity: Number(task.bin.capacity) || 50,
+        priority: task.priority || "NORMAL",
+        stopOrder: 1,
+        isCompleted: task.status === "COMPLETED",
+      },
+    ];
+  }
+
+  // Re-number stop orders sequentially
+  filteredStops.forEach((s, idx) => {
+    s.stopOrder = idx + 1;
+  });
+
+  routeData.orderedStops = filteredStops;
+  routeData.totalStops = filteredStops.length;
+
+  task.recommendedRoute = JSON.stringify(routeData);
+
+  // If unassigned candidate stops were removed, clean the record in database in place
+  if (initialCount !== filteredStops.length) {
+    prisma.collectionTask.update({
+      where: { id: task.id },
+      data: {
+        recommendedRoute: task.recommendedRoute,
+        notes: task.notes
+          ? task.notes.replace(/\[AI Multi-Stop Route: \d+ Stops\]/, `[AI Route: ${filteredStops.length} ${filteredStops.length === 1 ? "Stop" : "Stops"}]`)
+          : task.notes,
+      },
+    }).catch((err) => console.error("Failed to update sanitized task route in DB:", err));
+  }
+
+  return task;
+}
+
 export async function listMyTasks(req, res, next) {
   try {
     const tasks = await prisma.collectionTask.findMany({
@@ -10,7 +83,13 @@ export async function listMyTasks(req, res, next) {
       include: { bin: true, truck: true },
       orderBy: { createdAt: "desc" },
     });
-    res.json({ success: true, data: tasks });
+
+    const activeTasks = tasks.filter((t) => t.status !== "CANCELLED" && t.status !== "COMPLETED");
+    const activeAssignedBinIds = new Set(activeTasks.map((t) => t.binId));
+
+    const sanitizedTasks = tasks.map((t) => sanitizeDriverTaskRoute(t, activeAssignedBinIds));
+
+    res.json({ success: true, data: sanitizedTasks });
   } catch (err) {
     next(err);
   }
@@ -18,10 +97,25 @@ export async function listMyTasks(req, res, next) {
 
 export async function getMyTask(req, res, next) {
   try {
-    const task = await prisma.collectionTask.findUnique({ where: { id: Number(req.params.id) }, include: { bin: true, truck: true } });
+    const task = await prisma.collectionTask.findUnique({
+      where: { id: Number(req.params.id) },
+      include: { bin: true, truck: true },
+    });
     if (!task) return res.status(404).json({ success: false, message: "Task not found" });
     if (task.driverId !== req.user.id) return res.status(403).json({ success: false, message: "Not authorized" });
-    res.json({ success: true, data: task });
+
+    const activeTasks = await prisma.collectionTask.findMany({
+      where: {
+        driverId: req.user.id,
+        status: { in: ["ASSIGNED", "IN_PROGRESS", "PENDING"] },
+      },
+      select: { binId: true },
+    });
+    const activeAssignedBinIds = new Set(activeTasks.map((t) => t.binId));
+
+    const sanitizedTask = sanitizeDriverTaskRoute(task, activeAssignedBinIds);
+
+    res.json({ success: true, data: sanitizedTask });
   } catch (err) {
     next(err);
   }

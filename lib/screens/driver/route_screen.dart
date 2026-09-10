@@ -17,6 +17,7 @@ class DriverRouteScreen extends StatelessWidget {
     final activeTasks = driverNotifier.tasks
         .where((t) => t.status != TaskStatus.completed)
         .toList();
+    final assignedStops = driverNotifier.assignedActiveStops;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -36,7 +37,7 @@ class DriverRouteScreen extends StatelessWidget {
           },
         ),
       ),
-      bottomNavigationBar: (aiTask != null || activeTasks.isNotEmpty)
+      bottomNavigationBar: assignedStops.isNotEmpty
           ? Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -80,19 +81,22 @@ class DriverRouteScreen extends StatelessWidget {
       body: Container(
         width: double.infinity,
         decoration: BoxDecoration(gradient: AppTheme.bgGradient),
-        child: aiTask != null
-            ? _buildAiRouteView(context, aiTask, driverNotifier)
-            : (activeTasks.isNotEmpty
-                ? _buildStandardTasksView(context, activeTasks, driverNotifier)
-                : _buildEmptyState()),
+        child: assignedStops.isNotEmpty
+            ? (aiTask != null
+                ? _buildAiRouteView(context, aiTask, driverNotifier)
+                : _buildStandardTasksView(context, activeTasks, driverNotifier))
+            : _buildEmptyState(),
       ),
     );
   }
 
   Widget _buildAiRouteView(BuildContext context, TaskEntity task, DriverNotifier notifier) {
-    final stops = task.routeStops;
+    final stops = notifier.assignedActiveStops;
     final totalDistance = task.distanceKm ?? 0.0;
     final totalDuration = task.estimatedDuration ?? 0;
+    final pendingCount = stops.where((s) => !s.isCompleted).length;
+    final completedCount = stops.where((s) => s.isCompleted).length;
+    final nextStop = stops.where((s) => !s.isCompleted).firstOrNull;
 
     return ListView(
       padding: const EdgeInsets.all(18),
@@ -134,7 +138,7 @@ class DriverRouteScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '${task.pendingStopsCount} of ${task.totalStops} Pending',
+                      '$pendingCount of ${stops.length} Pending',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -147,7 +151,7 @@ class DriverRouteScreen extends StatelessWidget {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  _buildMetricItem('STOPS', '${task.totalStops}', Icons.pin_drop_rounded),
+                  _buildMetricItem('STOPS', '${stops.length}', Icons.pin_drop_rounded),
                   _buildMetricDivider(),
                   _buildMetricItem('DISTANCE', '${totalDistance.toStringAsFixed(1)} km', Icons.route_rounded),
                   _buildMetricDivider(),
@@ -167,7 +171,7 @@ class DriverRouteScreen extends StatelessWidget {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.darkText),
             ),
             Text(
-              '${task.completedStopsCount}/${task.totalStops} Completed',
+              '$completedCount/${stops.length} Completed',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade600),
             ),
           ],
@@ -176,7 +180,7 @@ class DriverRouteScreen extends StatelessWidget {
 
         // Stops List
         if (stops.isNotEmpty)
-          ...stops.map((stop) => _buildStopCard(context, stop, task, notifier))
+          ...stops.map((stop) => _buildStopCard(context, stop, task, notifier, isNext: stop.id == nextStop?.id))
         else
           // Fallback if stops list not populated
           _buildSingleStopFallback(task),
@@ -186,9 +190,14 @@ class DriverRouteScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStopCard(BuildContext context, RouteStopEntity stop, TaskEntity task, DriverNotifier notifier) {
+  Widget _buildStopCard(
+    BuildContext context,
+    RouteStopEntity stop,
+    TaskEntity task,
+    DriverNotifier notifier, {
+    bool isNext = false,
+  }) {
     final isCompleted = stop.isCompleted;
-    final isNext = !isCompleted && (task.currentStop?.id == stop.id);
 
     Color priorityColor;
     String priorityText;
@@ -369,12 +378,13 @@ class DriverRouteScreen extends StatelessWidget {
   }
 
   Widget _buildStandardTasksView(BuildContext context, List<TaskEntity> tasks, DriverNotifier notifier) {
+    final stops = notifier.assignedActiveStops;
     return ListView.builder(
       padding: const EdgeInsets.all(18),
-      itemCount: tasks.length,
+      itemCount: stops.length,
       itemBuilder: (context, index) {
-        final task = tasks[index];
-        final isNext = index == 0;
+        final stop = stops[index];
+        final isNext = index == 0 && !stop.isCompleted;
 
         return BinovaCard(
           margin: const EdgeInsets.only(bottom: 14),
@@ -391,7 +401,7 @@ class DriverRouteScreen extends StatelessWidget {
                 ),
                 child: Center(
                   child: Text(
-                    '${index + 1}',
+                    '${stop.stopOrder}',
                     style: TextStyle(
                       color: isNext ? Colors.white : AppTheme.primaryEmerald,
                       fontWeight: FontWeight.bold,
@@ -408,11 +418,11 @@ class DriverRouteScreen extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Bin ${task.binId}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        Text(stop.binCode, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                         Text(
-                          '${task.fillLevel}% Full',
+                          '${stop.fillLevel}% Full',
                           style: TextStyle(
-                            color: task.fillLevel > 80 ? Colors.red : AppTheme.primaryEmerald,
+                            color: stop.fillLevel > 80 ? Colors.red : AppTheme.primaryEmerald,
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
@@ -420,7 +430,7 @@ class DriverRouteScreen extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(task.location, style: const TextStyle(color: AppTheme.greyText, fontSize: 13)),
+                    Text(stop.address, style: const TextStyle(color: AppTheme.greyText, fontSize: 13)),
                   ],
                 ),
               ),

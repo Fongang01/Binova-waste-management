@@ -137,7 +137,7 @@ class _TasksList extends StatelessWidget {
                       Text(
                         isAi
                             ? (task.currentStop != null ? 'Stop #${task.currentStopNumber}: ${task.currentStop!.binCode}' : 'Route: ${task.totalStops} Stops')
-                            : 'Bin: ${task.binId}',
+                            : 'Bin: ${task.binCode ?? task.binId}',
                         style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                       ),
                     ],

@@ -394,59 +394,85 @@ export default function Bins(){
             </div>
           </div>
 
-          {/* Search and Filter Toolbar */}
-          <div className="toolbar-card">
-            <div className="search-field">
-              <Search size={16} />
-              <input
-                type="text"
-                placeholder="Search by bin code, address, or ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button type="button" className="search-clear-btn" onClick={() => setSearchQuery('')} aria-label="Clear search">
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            <div className="filter-pill-group">
+          {/* SEARCH & FILTERS TOOLBAR */}
+          <div className="collections-toolbar-card">
+            {/* Status Tabs Row */}
+            <div className="collections-tabs-row" role="tablist" aria-label="Bin Status Tabs">
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'ALL' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'ALL'}
+                className={`collections-tab-btn ${statusFilter === 'ALL' ? 'active' : ''}`}
                 onClick={() => handleFilterChange('ALL')}
               >
-                All ({bins.length})
+                <span>All Bins</span>
+                <span className="collections-tab-count">{bins.length}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'CRITICAL' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'CRITICAL'}
+                className={`collections-tab-btn tab-danger ${statusFilter === 'CRITICAL' ? 'active' : ''}`}
                 onClick={() => handleFilterChange('CRITICAL')}
               >
-                <AlertTriangle size={13} /> Critical ({bins.filter(b => Number(b.currentFillLevel || 0) >= 80).length})
+                <AlertTriangle size={14} />
+                <span>Critical</span>
+                <span className="collections-tab-count">{bins.filter(b => Number(b.currentFillLevel || 0) >= 80).length}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'ACTIVE' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'ACTIVE'}
+                className={`collections-tab-btn ${statusFilter === 'ACTIVE' ? 'active' : ''}`}
                 onClick={() => handleFilterChange('ACTIVE')}
               >
-                Active ({bins.filter(b => b.status === 'ACTIVE').length})
+                <span>Active</span>
+                <span className="collections-tab-count">{bins.filter(b => b.status === 'ACTIVE').length}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'INACTIVE' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'INACTIVE'}
+                className={`collections-tab-btn ${statusFilter === 'INACTIVE' ? 'active' : ''}`}
                 onClick={() => handleFilterChange('INACTIVE')}
               >
-                Inactive ({bins.filter(b => b.status === 'INACTIVE').length})
+                <span>Inactive</span>
+                <span className="collections-tab-count">{bins.filter(b => b.status === 'INACTIVE').length}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'DAMAGED' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'DAMAGED'}
+                className={`collections-tab-btn tab-danger ${statusFilter === 'DAMAGED' ? 'active' : ''}`}
                 onClick={() => handleFilterChange('DAMAGED')}
               >
-                Damaged ({bins.filter(b => b.status === 'DAMAGED').length})
+                <span>Damaged</span>
+                <span className="collections-tab-count">{bins.filter(b => b.status === 'DAMAGED').length}</span>
               </button>
+            </div>
+
+            {/* Search Row */}
+            <div className="collections-search-filter-row">
+              <div className="collections-search-box">
+                <Search size={16} />
+                <input
+                  type="text"
+                  placeholder="Search bins by code, address, or ID..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="Search bins"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="collections-search-clear"
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Clear search"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -465,16 +491,16 @@ export default function Bins(){
           {!loading && filteredBins.length > 0 && (
             <div className="table-card">
               <div className="table-wrap">
-                <table className="data-table">
+                <table className="data-table collections-table">
                   <thead>
                     <tr>
-                      <th>Bin Code</th>
-                      <th>Location / Address</th>
-                      <th>Fill Level</th>
-                      <th>Capacity</th>
-                      <th>Status</th>
-                      <th>Updated</th>
-                      <th>Actions</th>
+                      <th style={{ width: '130px' }}>Bin Code</th>
+                      <th style={{ minWidth: '220px' }}>Location / Address</th>
+                      <th style={{ minWidth: '160px' }}>Fill Level</th>
+                      <th style={{ width: '110px' }}>Capacity</th>
+                      <th style={{ width: '110px' }}>Status</th>
+                      <th style={{ width: '120px' }}>Updated</th>
+                      <th style={{ width: '170px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -490,7 +516,7 @@ export default function Bins(){
                         >
                           <td>
                             <div className="font-semibold text-dark flex-align-center gap-6">
-                              {bin.binCode || bin.code}
+                              <span>{bin.binCode || bin.code}</span>
                               {isCritical && (
                                 <span className="badge-critical-mini" title="Critical: Fill level ≥ 80%">
                                   <AlertTriangle size={12} />
@@ -500,8 +526,8 @@ export default function Bins(){
                           </td>
                           <td>
                             <div className="flex-align-center gap-6 text-dark">
-                              <MapPin size={14} className="text-muted" />
-                              <span>{bin.address || `${bin.latitude?.toFixed(4)}, ${bin.longitude?.toFixed(4)}`}</span>
+                              <MapPin size={14} className="text-muted" style={{ flexShrink: 0 }} />
+                              <span className="bin-address">{bin.address || `${bin.latitude?.toFixed(4)}, ${bin.longitude?.toFixed(4)}`}</span>
                             </div>
                           </td>
                           <td>
@@ -519,15 +545,19 @@ export default function Bins(){
                               <span className={isCritical ? 'text-danger font-semibold' : 'font-medium'}>{fill}%</span>
                             </div>
                           </td>
-                          <td>{bin.capacity} m³</td>
+                          <td>
+                            <span className="font-mono text-xs">{bin.capacity} m³</span>
+                          </td>
                           <td>
                             <span className={`status-badge status-${(bin.status || 'ACTIVE').toLowerCase()}`}>
                               {bin.status || 'ACTIVE'}
                             </span>
                           </td>
-                          <td>{bin.updatedAt ? new Date(bin.updatedAt).toLocaleDateString() : '—'}</td>
                           <td>
-                            <div className="row-actions" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-xs text-dark">{bin.updatedAt ? new Date(bin.updatedAt).toLocaleDateString() : '—'}</span>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div className="row-actions" style={{ justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
                               <button
                                 type="button"
                                 className="table-action view"

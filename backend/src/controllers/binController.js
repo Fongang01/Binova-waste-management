@@ -11,7 +11,12 @@ export async function createBin(req, res, next) {
 
 export async function listBins(req, res, next) {
   try {
-    const bins = await binService.listBins(req.query);
+    let bins;
+    if (req.user && req.user.role === "DRIVER") {
+      bins = await binService.listDriverAssignedBins(req.user.id);
+    } else {
+      bins = await binService.listBins(req.query);
+    }
     res.json({ success: true, data: bins });
   } catch (err) {
     next(err);
@@ -22,6 +27,16 @@ export async function getBin(req, res, next) {
   try {
     const bin = await binService.getBin(req.params.id);
     if (!bin) return res.status(404).json({ success: false, message: "Bin not found" });
+
+    // If caller is a DRIVER, verify that this bin is assigned to them in an active task
+    if (req.user && req.user.role === "DRIVER") {
+      const assignedBins = await binService.listDriverAssignedBins(req.user.id);
+      const isAssigned = assignedBins.some((b) => b.id === bin.id);
+      if (!isAssigned) {
+        return res.status(403).json({ success: false, message: "Not authorized to access this bin" });
+      }
+    }
+
     res.json({ success: true, data: bin });
   } catch (err) {
     next(err);

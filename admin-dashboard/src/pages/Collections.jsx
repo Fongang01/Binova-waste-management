@@ -71,8 +71,14 @@ export default function Collections(){
   // Sync URL query params
   useEffect(() => {
     const s = searchParams.get('status')?.toUpperCase()
-    if (s && ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'DELETED', 'ALL'].includes(s)) {
-      setStatusFilter(s === 'DELETED' ? 'CANCELLED' : s)
+    if (s && ['PENDING', 'ASSIGNED', 'PENDING_ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'DELETED', 'ALL'].includes(s)) {
+      if (s === 'DELETED') {
+        setStatusFilter('CANCELLED')
+      } else if (s === 'PENDING') {
+        setStatusFilter('ASSIGNED')
+      } else {
+        setStatusFilter(s)
+      }
     }
   }, [searchParams])
 
@@ -117,10 +123,14 @@ export default function Collections(){
       // Status Filter
       if (statusFilter === 'ALL') {
         if (task.status === 'CANCELLED') return false
+      } else if (statusFilter === 'ASSIGNED' || statusFilter === 'PENDING' || statusFilter === 'PENDING_ASSIGNED') {
+        if (task.status !== 'PENDING' && task.status !== 'ASSIGNED') return false
+      } else if (statusFilter === 'IN_PROGRESS') {
+        if (task.status !== 'IN_PROGRESS') return false
+      } else if (statusFilter === 'COMPLETED') {
+        if (task.status !== 'COMPLETED') return false
       } else if (statusFilter === 'CANCELLED' || statusFilter === 'DELETED') {
         if (task.status !== 'CANCELLED') return false
-      } else if (task.status !== statusFilter) {
-        return false
       }
 
       // Priority Filter
@@ -131,21 +141,27 @@ export default function Collections(){
       // Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim()
+        const rawQ = q.replace(/^#/, '')
+
+        const idStr = String(task.id || '').toLowerCase()
         const binCode = (task.bin?.binCode || task.bin?.code || '').toLowerCase()
         const binAddress = (task.bin?.address || '').toLowerCase()
-        const driverName = task.driver ? `${task.driver.firstName} ${task.driver.lastName}`.toLowerCase() : ''
+        const driverFirst = (task.driver?.firstName || '').toLowerCase()
+        const driverLast = (task.driver?.lastName || '').toLowerCase()
+        const driverFull = `${driverFirst} ${driverLast}`.trim()
+        const driverEmail = (task.driver?.email || '').toLowerCase()
         const truckReg = (task.truck?.registrationNumber || task.truck?.registration || '').toLowerCase()
-        const idStr = String(task.id || '').toLowerCase()
+        const truckModel = (task.truck?.model || '').toLowerCase()
         const notesStr = (task.notes || '').toLowerCase()
+        const priorityStr = (task.priority || '').toLowerCase()
 
-        return (
-          binCode.includes(q) ||
-          binAddress.includes(q) ||
-          driverName.includes(q) ||
-          truckReg.includes(q) ||
-          idStr.includes(q) ||
-          notesStr.includes(q)
-        )
+        const matchId = idStr === rawQ || idStr.includes(rawQ) || `task-${idStr}`.includes(rawQ)
+        const matchBin = binCode.includes(q) || binAddress.includes(q)
+        const matchDriver = driverFull.includes(q) || driverFirst.includes(q) || driverLast.includes(q) || driverEmail.includes(q)
+        const matchTruck = truckReg.includes(q) || truckModel.includes(q)
+        const matchOther = notesStr.includes(q) || priorityStr.includes(q)
+
+        return matchId || matchBin || matchDriver || matchTruck || matchOther
       }
 
       return true
@@ -284,7 +300,7 @@ export default function Collections(){
   }
 
   const activeCount = items.filter(t => t.status !== 'CANCELLED').length
-  const assignedCount = items.filter(t => t.status === 'ASSIGNED').length
+  const pendingAssignedCount = items.filter(t => t.status === 'PENDING' || t.status === 'ASSIGNED').length
   const inProgressCount = items.filter(t => t.status === 'IN_PROGRESS').length
   const completedCount = items.filter(t => t.status === 'COMPLETED').length
   const deletedCount = items.filter(t => t.status === 'CANCELLED').length
@@ -405,73 +421,98 @@ export default function Collections(){
           </div>
 
           {/* SEARCH & FILTERS TOOLBAR */}
-          <div className="toolbar-card">
-            <div className="search-field">
-              <Search size={16} />
-              <input
-                type="text"
-                placeholder="Search tasks by bin code, driver, truck, or notes..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button type="button" className="search-clear-btn" onClick={() => setSearchQuery('')} aria-label="Clear search">
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            <div className="filter-pill-group">
+          <div className="collections-toolbar-card">
+            {/* Status Tabs Row: Required Order 1. All Active, 2. Pending / Assigned, 3. In Progress, 4. Completed, 5. Deleted History */}
+            <div className="collections-tabs-row" role="tablist" aria-label="Task Status Tabs">
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'ALL' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'ALL'}
+                className={`collections-tab-btn ${statusFilter === 'ALL' ? 'active' : ''}`}
                 onClick={() => handleStatusFilterChange('ALL')}
               >
-                All Active ({activeCount})
+                <span>All Active</span>
+                <span className="collections-tab-count">{activeCount}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'ASSIGNED' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'ASSIGNED' || statusFilter === 'PENDING' || statusFilter === 'PENDING_ASSIGNED'}
+                className={`collections-tab-btn ${(statusFilter === 'ASSIGNED' || statusFilter === 'PENDING' || statusFilter === 'PENDING_ASSIGNED') ? 'active' : ''}`}
                 onClick={() => handleStatusFilterChange('ASSIGNED')}
               >
-                Pending / Assigned ({assignedCount})
+                <span>Pending / Assigned</span>
+                <span className="collections-tab-count">{pendingAssignedCount}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'IN_PROGRESS' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'IN_PROGRESS'}
+                className={`collections-tab-btn ${statusFilter === 'IN_PROGRESS' ? 'active' : ''}`}
                 onClick={() => handleStatusFilterChange('IN_PROGRESS')}
               >
-                In Progress ({inProgressCount})
+                <span>In Progress</span>
+                <span className="collections-tab-count">{inProgressCount}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'COMPLETED' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'COMPLETED'}
+                className={`collections-tab-btn ${statusFilter === 'COMPLETED' ? 'active' : ''}`}
                 onClick={() => handleStatusFilterChange('COMPLETED')}
               >
-                Completed ({completedCount})
+                <span>Completed</span>
+                <span className="collections-tab-count">{completedCount}</span>
               </button>
               <button
                 type="button"
-                className={`filter-pill ${statusFilter === 'CANCELLED' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={statusFilter === 'CANCELLED'}
+                className={`collections-tab-btn tab-deleted ${statusFilter === 'CANCELLED' ? 'active' : ''}`}
                 onClick={() => handleStatusFilterChange('CANCELLED')}
-                style={{ borderColor: statusFilter === 'CANCELLED' ? '#ef4444' : undefined }}
               >
-                <Archive size={13} /> Deleted History ({deletedCount})
+                <Archive size={14} />
+                <span>Deleted History</span>
+                <span className="collections-tab-count">{deletedCount}</span>
               </button>
             </div>
 
-            <select
-              className="select-field"
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-              style={{ maxWidth: 160 }}
-            >
-              <option value="ALL">All Priorities</option>
-              <option value="LOW">Low Priority</option>
-              <option value="NORMAL">Normal Priority</option>
-              <option value="HIGH">High Priority</option>
-              <option value="CRITICAL">Critical Priority</option>
-            </select>
+            {/* Search & Priority Controls Row: Side-by-side on desktop, cleanly wrapping on smaller screens */}
+            <div className="collections-search-filter-row">
+              <div className="collections-search-box">
+                <Search size={16} />
+                <input
+                  type="text"
+                  placeholder="Search tasks by ID, bin code, address, driver, vehicle..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="Search collection tasks"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="collections-search-clear"
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Clear search"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              <select
+                className="collections-priority-select"
+                value={priorityFilter}
+                onChange={(e) => setPriorityFilter(e.target.value)}
+                aria-label="Filter by priority"
+              >
+                <option value="ALL">All Priorities</option>
+                <option value="CRITICAL">Critical Priority</option>
+                <option value="HIGH">High Priority</option>
+                <option value="NORMAL">Normal Priority</option>
+                <option value="LOW">Low Priority</option>
+              </select>
+            </div>
           </div>
 
           {error && <div className="error-box">{error}</div>}
@@ -488,38 +529,38 @@ export default function Collections(){
           {!loading && filteredTasks.length > 0 && (
             <div className="table-card">
               <div className="table-wrap">
-                <table className="data-table">
+                <table className="data-table collections-table">
                   <thead>
                     <tr>
-                      <th>Task ID</th>
-                      <th>Bin Details</th>
-                      <th>Assigned Driver</th>
-                      <th>Vehicle</th>
-                      <th>Priority</th>
-                      <th>Status</th>
-                      <th>Created</th>
-                      <th>Actions</th>
+                      <th style={{ width: '85px' }}>Task ID</th>
+                      <th style={{ minWidth: '180px' }}>Bin Details</th>
+                      <th style={{ minWidth: '160px' }}>Assigned Driver</th>
+                      <th style={{ minWidth: '130px' }}>Vehicle</th>
+                      <th style={{ width: '110px' }}>Priority</th>
+                      <th style={{ width: '130px' }}>Status</th>
+                      <th style={{ width: '120px' }}>Created</th>
+                      <th style={{ width: '100px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredTasks.map((task) => {
                       const isDeleted = task.status === 'CANCELLED'
                       return (
-                        <tr key={task.id} style={{ opacity: isDeleted ? 0.85 : 1 }}>
+                        <tr key={task.id} style={{ opacity: isDeleted ? 0.88 : 1 }}>
                           <td>
                             <span className="font-semibold text-dark font-mono text-xs">#{task.id}</span>
                           </td>
                           <td>
-                            <div>
-                              <div className="font-semibold text-dark">{task.bin ? (task.bin.binCode || task.bin.code) : '—'}</div>
-                              <div className="text-muted text-xs">{task.bin?.address || 'No address recorded'}</div>
+                            <div className="bin-cell">
+                              <div className="font-semibold text-dark">{task.bin ? (task.bin.binCode || task.bin.code) : `Bin #${task.binId}`}</div>
+                              <div className="text-muted text-xs bin-address">{task.bin?.address || 'No address recorded'}</div>
                             </div>
                           </td>
                           <td>
                             {task.driver ? (
                               <div className="flex-align-center gap-6">
-                                <User size={14} className="text-muted" />
-                                <span>{task.driver.firstName} {task.driver.lastName}</span>
+                                <User size={14} className="text-muted" style={{ flexShrink: 0 }} />
+                                <span className="text-dark font-medium">{task.driver.firstName} {task.driver.lastName}</span>
                               </div>
                             ) : (
                               <span className="text-muted text-xs">Unassigned</span>
@@ -528,8 +569,8 @@ export default function Collections(){
                           <td>
                             {task.truck ? (
                               <div className="flex-align-center gap-6">
-                                <TruckIcon size={14} className="text-muted" />
-                                <span>{task.truck.registrationNumber || task.truck.registration}</span>
+                                <TruckIcon size={14} className="text-muted" style={{ flexShrink: 0 }} />
+                                <span className="font-mono text-xs font-semibold">{task.truck.registrationNumber || task.truck.registration}</span>
                               </div>
                             ) : (
                               <span className="text-muted text-xs">—</span>
@@ -552,22 +593,22 @@ export default function Collections(){
                             )}
                           </td>
                           <td>
-                            <div>
-                              <div>{task.createdAt ? new Date(task.createdAt).toLocaleDateString() : '—'}</div>
-                              {isDeleted && task.notes && task.notes.includes('[DELETED]') && (
-                                <div className="text-muted text-xs font-mono" style={{ color: '#ef4444' }}>
+                            <div className="text-xs">
+                              <div className="text-dark">{task.createdAt ? new Date(task.createdAt).toLocaleDateString() : '—'}</div>
+                              {isDeleted && (
+                                <div className="text-muted font-mono" style={{ color: '#ef4444', fontSize: '0.68rem' }}>
                                   Archived
                                 </div>
                               )}
                             </div>
                           </td>
-                          <td>
+                          <td style={{ textAlign: 'right' }}>
                             {isDeleted ? (
-                              <span className="muted-badge" title={task.notes || 'Recorded in History'}>
-                                Recorded in History
+                              <span className="muted-badge text-xs" title={task.notes || 'Recorded in History'}>
+                                Archived
                               </span>
                             ) : (
-                              <div className="row-actions">
+                              <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
                                 <button
                                   type="button"
                                   className="table-action danger"
